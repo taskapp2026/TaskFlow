@@ -1,0 +1,143 @@
+{
+  "theme": "dark/light toggle with dark-mode-first philosophy",
+  "typography": {
+    "fonts": [
+      {
+        "family": "Cabinet Grotesk",
+        "usage": "Headings (H1, H2, H3), Dashboard Numbers",
+        "url": "https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700,400&display=swap"
+      },
+      {
+        "family": "Satoshi",
+        "usage": "Body text, UI elements, Buttons, Task Lists",
+        "url": "https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400&display=swap"
+      },
+      {
+        "family": "IBM Plex Mono",
+        "usage": "Code snippets, Task IDs, Timestamps, Audit Logs",
+        "url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      }
+    ],
+    "rules": [
+      "NO INTER or SPACE GROTESK fonts.",
+      "Headings (Size > 32px): MUST use tight letter spacing: tracking-tight or tracking-tighter.",
+      "Overlines / Labels: MUST be Uppercase + Tiny + Wide Spacing (tracking-widest / tracking-[0.2em]).",
+      "Line Height: Tight (leading-none) for headers, Loose (leading-relaxed) for body text."
+    ]
+  },
+  "colors": {
+    "strategy": "Swiss & High-Contrast (Archetype 4) mixed with Linear's precision. Monochrome base with Ultra-Marine / Klein Blue accents. No purple gradients, no teal.",
+    "css_variables_light": {
+      "--background": "240 20% 98%",
+      "--foreground": "240 10% 4%",
+      "--card": "0 0% 100%",
+      "--card-foreground": "240 10% 4%",
+      "--popover": "0 0% 100%",
+      "--popover-foreground": "240 10% 4%",
+      "--primary": "225 100% 40%", 
+      "--primary-foreground": "0 0% 100%",
+      "--secondary": "240 5% 92%",
+      "--secondary-foreground": "240 10% 4%",
+      "--muted": "240 5% 92%",
+      "--muted-foreground": "240 5% 45%",
+      "--accent": "240 5% 92%",
+      "--accent-foreground": "240 10% 4%",
+      "--destructive": "0 84% 60%",
+      "--destructive-foreground": "0 0% 100%",
+      "--border": "240 6% 90%",
+      "--input": "240 6% 90%",
+      "--ring": "225 100% 40%",
+      "--radius": "0.5rem",
+      "--priority-1": "0 84% 60%", 
+      "--priority-2": "24 95% 53%",
+      "--priority-3": "225 100% 40%",
+      "--priority-4": "240 5% 60%"
+    },
+    "css_variables_dark": {
+      "--background": "225 6% 4%", 
+      "--foreground": "240 5% 96%",
+      "--card": "225 6% 6%",
+      "--card-foreground": "240 5% 96%",
+      "--popover": "225 6% 6%",
+      "--popover-foreground": "240 5% 96%",
+      "--primary": "225 100% 50%", 
+      "--primary-foreground": "0 0% 100%",
+      "--secondary": "225 6% 12%",
+      "--secondary-foreground": "240 5% 96%",
+      "--muted": "225 6% 12%",
+      "--muted-foreground": "240 5% 65%",
+      "--accent": "225 6% 12%",
+      "--accent-foreground": "240 5% 96%",
+      "--destructive": "0 84% 60%",
+      "--destructive-foreground": "0 0% 100%",
+      "--border": "225 6% 14%",
+      "--input": "225 6% 14%",
+      "--ring": "225 100% 50%",
+      "--priority-1": "0 84% 65%",
+      "--priority-2": "24 95% 58%",
+      "--priority-3": "225 100% 60%",
+      "--priority-4": "240 5% 50%"
+    },
+    "rules": [
+      "Avoid pure white for text in dark mode; use muted ink (#F7F8F8 equivalent).",
+      "DO NOT use pure black or gray; always tint neutrally with blue (as done in the CSS vars with hue 225/240).",
+      "Priority Badges must be strictly color-coded: P1 (Red), P2 (Orange), P3 (Blue), P4 (Neutral Gray)."
+    ]
+  },
+  "visual_enhancers": {
+    "surfaces": [
+      "Whisper-thin borders: Use border-border/40 or border-border/50 to create delicate separation without heavy lines.",
+      "Cardless Lists: Task lists should NOT be wrapped in bulky cards. Use raw rows with a 1px border-b border-border/40. On hover, apply a subtle bg-muted/40 change.",
+      "Modals/Dialogs: Must use Glassmorphism overlay. backdrop-blur-xl bg-black/60 (dark mode) or bg-white/60 (light mode). The modal itself should be solid.",
+      "NEUMORPHISM FOR FLOATING BUTTON: The Global '+' button must have strong ambient drop shadow (e.g., shadow-[0_8px_32px_rgba(0,0,0,0.12)]) and an inner 1px border."
+    ],
+    "animations": [
+      "Hover states must always change text color AND background, e.g., hover:bg-muted hover:text-foreground.",
+      "Todoist-style Circular Checkbox: Unchecked is just a 1px border. Checked state transitions background to Primary color and text to white checkmark.",
+      "Sidebar items: Hover should create a subtle inset effect, NOT a full block background."
+    ]
+  },
+  "grids_layouts": {
+    "spacing": "Generous Spacing Philosophy. Use Tailwind scale p-6, p-8 for containers to give elements room to breathe. Density only applies to the Data Tables/Task Lists.",
+    "sidebar": "Fixed width 260px. Flex column. Navigation items should have a tight gap-1 but generous padding p-2.",
+    "dashboard_mode": "High Density Grid (Mode B). grid-cols-1 md:grid-cols-3 lg:grid-cols-4. Gaps should be gap-6. Charts span col-span-2 or col-span-3.",
+    "task_detail_panel": "Floating right-side panel or centered modal. Must have Tabs (Overview, Subtasks, Attachments, Comments, Activity Timeline) separated by a 1px bottom border for the tab list."
+  },
+  "component_guidelines": {
+    "buttons": "Pill-shaped (rounded-full) for primary actions, subtle roundness (rounded-md) for secondary toolbars.",
+    "inputs": "Shadcn standard but strip aggressive focus rings. Use focus:ring-1 focus:ring-primary focus:border-primary.",
+    "tabs": "Override Shadcn fixed height. h-auto to prevent cutoff.",
+    "calendar_date_picker": "USE SHADCN Calendar component. DO NOT use native HTML <input type='date'>.",
+    "select_dropdown": "USE SHADCN Select/DropdownMenu. DO NOT use native HTML <select>. Ensure Dropdown has a SOLID background, never transparent.",
+    "icons": "Use @phosphor-icons/react for a dense, high-end technical feel.",
+    "toasts": "Use `sonner` for real-time websocket notifications and standard alerts. Located in /app/src/components/ui/sonner.jsx."
+  },
+  "media": {
+    "image_urls": {
+      "login_page_background": {
+        "url": "https://images.pexels.com/photos/18599565/pexels-photo-18599565.jpeg",
+        "description": "Black and white photo of a minimalist building facade with vertical windows.",
+        "usage": "Use as a split-screen background for the Login Page (auth layout) to give an architectural, enterprise feel. Apply a light overlay if needed for contrast."
+      }
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure text meets APCA/WCAG standards. Do not put transparent backgrounds behind text unless heavily blurred.",
+    "testing": "All interactive and key informational elements MUST include a `data-testid` attribute (e.g., data-testid='create-task-button', data-testid='task-item-123')."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid 'AI slop' aesthetic.",
+    "Use .js/.jsx extensions for React files, NOT .tsx.",
+    "DO NOT center align the app container (.App { text-align: center; } is FORBIDDEN).",
+    "DO NOT apply universal transitions (transition: all). Target specific properties like transition-colors, transition-transform.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "NEVER use AI assistant Emoji characters (🤖, 🧠, 💡, etc.) for icons.",
+    "Always use modern button styles like pill-shaped, or sharp buttons with interaction animations.",
+    "Prioritize using pre-existing components from src/components/ui. Customize them to fit the enterprise look.",
+    "Highlight and badge priorities clearly using the defined CSS variables (--priority-1 through --priority-4)."
+  ],
+  "instructions_to_main_agent": {
+    "setup": "Install necessary packages: yarn add @phosphor-icons/react sonner recharts tailwind-merge clsx",
+    "execution_order": "1. Set up routing (Login, Admin Dashboard, Staff Layout). 2. Build Sidebar & Shell. 3. Implement Data Grids and Task Lists. 4. Implement Task Creation Modal and Detail Panel. 5. Add WebSockets and Sonner Toasts for notifications. 6. Polish CSS variables for Light/Dark mode toggle."
+  }
+}

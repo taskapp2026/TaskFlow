@@ -1,0 +1,58 @@
+{
+  "summary": "Comprehensive e2e testing of TaskFlow MVP. 28/28 backend pytest tests pass. Frontend flows validated: admin/staff login, task CRUD, subtasks, comments, activity log, dashboard chart, staff management, RBAC route guard, theme toggle. Two minor issues observed (label UI create + one CORS config concern).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware", "issue": "allow_credentials=True combined with allow_origins=['*'] is invalid per spec; browsers block cookies. Works currently in preview because origin is same host, but should list explicit origins for production."},
+      {"endpoint": "Cookies (set_auth_cookies)", "issue": "secure=False hardcoded — should be True on HTTPS in production."},
+      {"endpoint": "POST /api/labels", "issue": "Line 469 `'global': user.get('role') == 'admin' and False` always evaluates to False; dead expression, likely a bug intent to allow admin to create global labels."},
+      {"endpoint": "Brute-force protection", "issue": "No rate limiting / account lockout on /api/auth/login (playbook expected lockout after 5 fails)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Toast overlay (Sonner) top-right", "issue": "Login welcome toast overlaps the 'Create Task' FAB in top-right for ~4s, transiently blocking clicks. Not a blocker; retry works after toast dismisses.", "selector": "[data-testid=floating-create-btn]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "WebSocket notifications /api/ws", "issue": "Console shows 'WebSocket closed before connection established' warnings on every page. Notifications GET fallback works (verified via API), so live push may be flaky/broken behind the ingress. Recommend a short polling fallback (or ping/pong keep-alive).", "affected_selectors": ["NotificationsBell"]}
+    ],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Priority Distribution donut chart renders but P4 slice is not visible when all tasks are P1 — acceptable."]},
+      {"screen": "AppShell top-right", "issues": ["FAB (Create Task) sits at same z-region as Sonner toaster; may be transiently covered."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix CORS: set explicit allowed origins instead of '*' when allow_credentials=True.",
+    "Set cookies secure=True (or driven by env) since app is served over HTTPS.",
+    "Fix label 'global' assignment logic in POST /api/labels (server.py:469).",
+    "Consider adding rate limiting / lockout on /api/auth/login.",
+    "Investigate WebSocket close-before-open; consider polling fallback for notifications.",
+    "Reposition Sonner toaster so it does not overlap the top-right FAB (e.g., bottom-right, or add margin so FAB stays clickable)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1086 lines — split into routers (auth, users, tasks, labels, comments, attachments, activity, notifications, dashboard) for maintainability.",
+    "create_label: `'global': user.get('role') == 'admin' and False` is redundant; either remove or implement the admin-global-labels feature.",
+    "CORS allow_credentials with '*' origins violates spec — will break real browsers on cross-origin.",
+    "download_attachment allows ?auth= query token — acceptable for image previews but logs may leak tokens; note as an intentional trade-off.",
+    "Dashboard endpoint runs N+4 count_documents per user (line 954-968); acceptable at MVP scale, but consider aggregation pipeline.",
+    "Activity is correctly immutable (no PATCH/DELETE route)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new: 28 pytest test cases)"
+  ],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "~95% (all critical flows pass; only WS live push flaky and label-create UI selector unresolved)"},
+  "test_credentials": "Admin: admin@example.com / admin123 (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "Admin user auto-seeded on backend startup. Test cleanup fixture removes any TEST_* users, tasks, labels created during pytest run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests in /app/backend/tests/backend_test.py cover all endpoints (auth, users, tasks incl. RBAC, subtasks, labels, comments, activity, notifications, dashboard) — 28 passing. If main agent modifies API contracts, re-run: `python -m pytest backend/tests/backend_test.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. For frontend, the FAB at [data-testid=floating-create-btn] is the 'Create Task' button top-right — wait ~4s after login for Sonner toast to dismiss before clicking, OR use force=True with explicit position. Labels page create-button flow needs explicit data-testids (add-label-btn, label-name-input, label-save-btn) — currently generic buttons make it hard to test.",
+  "rca_of_notable_findings": {
+    "modal_open_timing": "First attempt failing waiting for [data-testid=create-task-modal] was caused by Sonner 'Welcome back' toast being z-index above the FAB for ~4 seconds after login. Adding await page.wait_for_timeout(4500) between login and FAB click resolves it. Consider re-positioning toaster or lowering its pointer-events.",
+    "cors_credentials_wildcard": "server.py lines 1079-1085 set allow_credentials=True with allow_origins=['*'] (from CORS_ORIGINS='*'). Fetch spec forbids '*' with credentials; today it works because backend is same-origin behind ingress, but a real cross-origin frontend build would break."
+  }
+}

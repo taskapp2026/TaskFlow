@@ -1,0 +1,231 @@
+@import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,700,500,400&f[]=satoshi@900,700,500,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --font-display: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-feature-settings:
+        "ss01" on,
+        "ss02" on;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+    :root {
+        --background: 240 20% 98%;
+        --foreground: 240 10% 4%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 10% 4%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 10% 4%;
+        --primary: 225 100% 40%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 5% 92%;
+        --secondary-foreground: 240 10% 4%;
+        --muted: 240 5% 92%;
+        --muted-foreground: 240 5% 45%;
+        --accent: 240 5% 92%;
+        --accent-foreground: 240 10% 4%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 240 6% 90%;
+        --input: 240 6% 90%;
+        --ring: 225 100% 40%;
+        --radius: 0.5rem;
+        --priority-1: 0 84% 60%;
+        --priority-2: 24 95% 53%;
+        --priority-3: 225 100% 40%;
+        --priority-4: 240 5% 60%;
+        --chart-1: 225 100% 40%;
+        --chart-2: 24 95% 53%;
+        --chart-3: 160 60% 45%;
+        --chart-4: 280 40% 55%;
+        --chart-5: 0 84% 60%;
+    }
+    .dark {
+        --background: 225 6% 4%;
+        --foreground: 240 5% 96%;
+        --card: 225 6% 6%;
+        --card-foreground: 240 5% 96%;
+        --popover: 225 6% 6%;
+        --popover-foreground: 240 5% 96%;
+        --primary: 225 100% 60%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 225 6% 12%;
+        --secondary-foreground: 240 5% 96%;
+        --muted: 225 6% 12%;
+        --muted-foreground: 240 5% 65%;
+        --accent: 225 6% 12%;
+        --accent-foreground: 240 5% 96%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 225 6% 14%;
+        --input: 225 6% 14%;
+        --ring: 225 100% 60%;
+        --priority-1: 0 84% 65%;
+        --priority-2: 24 95% 58%;
+        --priority-3: 225 100% 65%;
+        --priority-4: 240 5% 50%;
+        --chart-1: 225 100% 65%;
+        --chart-2: 24 95% 60%;
+        --chart-3: 160 60% 55%;
+        --chart-4: 280 50% 65%;
+        --chart-5: 0 84% 65%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+    h1,
+    h2,
+    h3,
+    h4 {
+        font-family: var(--font-display);
+        letter-spacing: -0.02em;
+    }
+    .font-mono {
+        font-family: var(--font-mono);
+    }
+    .font-display {
+        font-family: var(--font-display);
+    }
+}
+
+/* Todoist-style checkbox */
+.tf-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: 1.5px solid hsl(var(--muted-foreground) / 0.6);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    cursor: pointer;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.1s ease;
+}
+.tf-check:hover {
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.08);
+}
+.tf-check.checked {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: white;
+}
+.tf-check .tf-tick {
+    opacity: 0;
+    transform: scale(0.6);
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease;
+}
+.tf-check.checked .tf-tick {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Priority chip */
+.priority-P1 {
+    color: hsl(var(--priority-1));
+    background: hsl(var(--priority-1) / 0.12);
+    border: 1px solid hsl(var(--priority-1) / 0.35);
+}
+.priority-P2 {
+    color: hsl(var(--priority-2));
+    background: hsl(var(--priority-2) / 0.12);
+    border: 1px solid hsl(var(--priority-2) / 0.35);
+}
+.priority-P3 {
+    color: hsl(var(--priority-3));
+    background: hsl(var(--priority-3) / 0.12);
+    border: 1px solid hsl(var(--priority-3) / 0.35);
+}
+.priority-P4 {
+    color: hsl(var(--priority-4));
+    background: hsl(var(--priority-4) / 0.12);
+    border: 1px solid hsl(var(--priority-4) / 0.35);
+}
+
+/* Overline label */
+.overline {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: hsl(var(--muted-foreground));
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Floating create button */
+.fab-glow {
+    box-shadow:
+        0 8px 32px hsl(var(--primary) / 0.35),
+        inset 0 0 0 1px hsl(var(--primary) / 0.4);
+}
+
+/* Sidebar nav item */
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: hsl(var(--muted-foreground));
+    font-weight: 500;
+    transition:
+        color 0.15s ease,
+        background-color 0.15s ease;
+    font-size: 14px;
+    cursor: pointer;
+}
+.nav-item:hover {
+    background: hsl(var(--muted) / 0.7);
+    color: hsl(var(--foreground));
+}
+.nav-item.active {
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+    box-shadow: inset 2px 0 0 hsl(var(--primary));
+}
+.dark .nav-item.active {
+    background: hsl(var(--primary) / 0.16);
+    color: hsl(var(--foreground));
+}
