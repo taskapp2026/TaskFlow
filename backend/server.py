@@ -47,6 +47,25 @@ APP_NAME = os.environ.get("APP_NAME", "taskflow")
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def env_list(name: str, default: str) -> List[str]:
+    return [v.strip() for v in os.environ.get(name, default).split(",") if v.strip()]
+
+
+COOKIE_SECURE = env_bool("COOKIE_SECURE", False)
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax").strip().lower()
+if COOKIE_SAMESITE not in ("lax", "strict", "none"):
+    COOKIE_SAMESITE = "lax"
+COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN") or None
+CORS_ORIGINS = env_list("CORS_ORIGINS", "http://localhost:3000")
+
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
@@ -134,15 +153,20 @@ def create_token(payload: dict, minutes: Optional[int] = None, days: Optional[in
 
 
 def set_auth_cookies(response: Response, access: str, refresh: str):
-    response.set_cookie("access_token", access, httponly=True, secure=False, samesite="lax",
-                        max_age=ACCESS_TOKEN_MINUTES * 60, path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=False, samesite="lax",
-                        max_age=REFRESH_TOKEN_DAYS * 24 * 3600, path="/")
+    cookie_options = {
+        "httponly": True,
+        "secure": COOKIE_SECURE,
+        "samesite": COOKIE_SAMESITE,
+        "domain": COOKIE_DOMAIN,
+        "path": "/",
+    }
+    response.set_cookie("access_token", access, max_age=ACCESS_TOKEN_MINUTES * 60, **cookie_options)
+    response.set_cookie("refresh_token", refresh, max_age=REFRESH_TOKEN_DAYS * 24 * 3600, **cookie_options)
 
 
 def clear_auth_cookies(response: Response):
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/")
+    response.delete_cookie("access_token", path="/", domain=COOKIE_DOMAIN)
+    response.delete_cookie("refresh_token", path="/", domain=COOKIE_DOMAIN)
 
 
 def user_public(u: dict) -> dict:
@@ -1079,7 +1103,7 @@ app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

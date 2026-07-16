@@ -10,8 +10,8 @@ import { formatApiErrorDetail } from "@/lib/api";
 
 export default function Login() {
   const { user, login } = useAuth();
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -123,9 +123,6 @@ export default function Login() {
             {loading ? "Signing in..." : "Sign in"}
           </Button>
 
-          <div className="mt-6 p-3 rounded-lg border border-border/60 text-xs font-mono text-muted-foreground">
-            Demo: admin@example.com / admin123
-          </div>
         </form>
       </div>
     </div>
