@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Zap } from "lucide-react";
+import { Eye, EyeOff, Zap } from "lucide-react";
 import { formatApiErrorDetail } from "@/lib/api";
 
 export default function Login() {
   const { user, login } = useAuth();
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("admin123");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -90,15 +91,26 @@ export default function Login() {
             </div>
             <div>
               <Label className="overline">Password</Label>
-              <Input
-                data-testid="login-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="mt-1.5"
-              />
+              <div className="relative mt-1.5">
+                <Input
+                  data-testid="login-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-2 grid w-7 place-items-center text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  data-testid="login-password-toggle"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           </div>
 

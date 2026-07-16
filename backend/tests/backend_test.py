@@ -6,17 +6,26 @@ Dashboard, RBAC.
 import os
 import time
 import uuid
+from pathlib import Path
+
 import pytest
 import requests
+from dotenv import load_dotenv
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL",
-                          "https://team-tasks-io-2.preview.emergentagent.com").rstrip("/")
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(BACKEND_DIR / ".env")
+
+BASE_URL = os.environ.get("BACKEND_URL") or os.environ.get(
+    "REACT_APP_BACKEND_URL", "http://localhost:8000"
+)
+BASE_URL = BASE_URL.rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@example.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@example.com")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
-STAFF_EMAIL = f"test_staff_{uuid.uuid4().hex[:8]}@example.com"
+TEST_RUN_ID = uuid.uuid4().hex[:8]
+STAFF_EMAIL = f"test_staff_{TEST_RUN_ID}@example.com"
 STAFF_PASSWORD = "staffPass123!"
 STAFF_NAME = "TEST Staff User"
 
@@ -129,7 +138,7 @@ class TestUsers:
 @pytest.fixture(scope="session")
 def admin_created_task_for_staff(admin_session, staff_user):
     r = admin_session.post(f"{API}/tasks", json={
-        "name": "TEST_admin_to_staff_task",
+        "name": f"TEST_{TEST_RUN_ID}_admin_to_staff_task",
         "description": "Assigned by admin",
         "assignee_id": staff_user["id"],
         "priority": "P2",
@@ -141,7 +150,7 @@ def admin_created_task_for_staff(admin_session, staff_user):
 @pytest.fixture(scope="session")
 def staff_created_task(staff_session):
     r = staff_session.post(f"{API}/tasks", json={
-        "name": "TEST_staff_self_task",
+        "name": f"TEST_{TEST_RUN_ID}_staff_self_task",
         "description": "Staff created own",
         "priority": "P3",
     })
@@ -183,7 +192,7 @@ class TestTasks:
     def test_staff_can_delete_own_task(self, staff_session):
         # create a temp task then delete
         r = staff_session.post(f"{API}/tasks", json={
-            "name": "TEST_delete_me", "priority": "P4"
+            "name": f"TEST_{TEST_RUN_ID}_delete_me", "priority": "P4"
         })
         assert r.status_code == 200
         tid = r.json()["id"]
@@ -228,10 +237,10 @@ class TestLabels:
     def test_label_crud(self, staff_session):
         # create
         r = staff_session.post(f"{API}/labels",
-                               json={"name": "TEST_label_A", "color": "#00ff00"})
+                               json={"name": f"TEST_{TEST_RUN_ID}_label_A", "color": "#00ff00"})
         assert r.status_code == 200
         lbl = r.json()
-        assert lbl["name"] == "TEST_label_A"
+        assert lbl["name"] == f"TEST_{TEST_RUN_ID}_label_A"
         lid = lbl["id"]
         # list
         r2 = staff_session.get(f"{API}/labels")
@@ -348,7 +357,7 @@ class TestRBAC:
     def test_staff_cannot_view_other_users_task(self, admin_session, staff_session):
         # admin creates own task
         r = admin_session.post(f"{API}/tasks", json={
-            "name": "TEST_admin_own_task", "priority": "P4"
+            "name": f"TEST_{TEST_RUN_ID}_admin_own_task", "priority": "P4"
         })
         assert r.status_code == 200
         tid = r.json()["id"]
@@ -377,15 +386,15 @@ def cleanup(request, admin_session):
     try:
         tasks = admin_session.get(f"{API}/tasks").json()
         for t in tasks:
-            if t.get("name", "").startswith("TEST_"):
+            if TEST_RUN_ID in t.get("name", ""):
                 admin_session.delete(f"{API}/tasks/{t['id']}")
         users = admin_session.get(f"{API}/users").json()
         for u in users:
-            if u["email"].startswith("TEST_"):
+            if TEST_RUN_ID in u["email"]:
                 admin_session.delete(f"{API}/users/{u['id']}")
         labels = admin_session.get(f"{API}/labels").json()
         for l in labels:
-            if l.get("name", "").startswith("TEST_"):
+            if TEST_RUN_ID in l.get("name", ""):
                 admin_session.delete(f"{API}/labels/{l['id']}")
     except Exception as e:
         print(f"cleanup error: {e}")

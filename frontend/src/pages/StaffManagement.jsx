@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, ShieldOff, Shield, Edit } from "lucide-react";
+import { Eye, EyeOff, Plus, Trash2, ShieldOff, Shield, Edit } from "lucide-react";
 import { toast } from "sonner";
 
 export default function StaffManagement() {
@@ -12,6 +12,7 @@ export default function StaffManagement() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", name: "", role: "staff" });
+  const [showPassword, setShowPassword] = useState(false);
 
   const load = async () => {
     const { data } = await api.get("/users");
@@ -22,11 +23,13 @@ export default function StaffManagement() {
   const openNew = () => {
     setEditing(null);
     setForm({ email: "", password: "", name: "", role: "staff" });
+    setShowPassword(false);
     setOpen(true);
   };
   const openEdit = (u) => {
     setEditing(u);
     setForm({ email: u.email, password: "", name: u.name, role: u.role });
+    setShowPassword(false);
     setOpen(true);
   };
 
@@ -115,7 +118,25 @@ export default function StaffManagement() {
           <div className="space-y-3">
             <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="staff-name-input" />
             <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} data-testid="staff-email-input" />
-            <Input placeholder={editing ? "New password (optional)" : "Password"} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="staff-password-input" />
+            <div className="relative">
+              <Input
+                placeholder={editing ? "New password (optional)" : "Password"}
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="pr-10"
+                data-testid="staff-password-input"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-2 grid w-7 place-items-center text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                data-testid="staff-password-toggle"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
             <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
               <SelectTrigger data-testid="staff-role-select">
                 <SelectValue />
