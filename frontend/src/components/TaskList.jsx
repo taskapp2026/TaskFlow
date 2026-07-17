@@ -57,16 +57,16 @@ export default function TaskList({ scope, title, subtitle }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto w-full">
-      <div className="pt-8 pb-4">
-        <h1 className="text-4xl sm:text-5xl font-display font-bold tracking-tight leading-none" data-testid="tasklist-title">
+    <div className="max-w-4xl mx-auto w-full pb-20 md:pb-0">
+      <div className="pt-6 pb-4 md:pt-8">
+        <h1 className="text-3xl sm:text-5xl font-display font-bold tracking-tight leading-none" data-testid="tasklist-title">
           {title}
         </h1>
         {subtitle && <p className="text-muted-foreground mt-2 text-sm">{subtitle}</p>}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="relative flex-1 min-w-[220px]">
+      <div className="grid grid-cols-2 gap-2 mb-3 sm:flex sm:flex-wrap sm:items-center">
+        <div className="relative col-span-2 sm:flex-1 sm:min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={search}
@@ -77,7 +77,7 @@ export default function TaskList({ scope, title, subtitle }) {
           />
         </div>
         <Select value={priority} onValueChange={setPriority}>
-          <SelectTrigger className="w-[130px]" data-testid="filter-priority">
+          <SelectTrigger className="w-full sm:w-[130px]" data-testid="filter-priority">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
@@ -89,7 +89,7 @@ export default function TaskList({ scope, title, subtitle }) {
           </SelectContent>
         </Select>
         <Select value={labelId} onValueChange={setLabelId}>
-          <SelectTrigger className="w-[140px]" data-testid="filter-label">
+          <SelectTrigger className="w-full sm:w-[140px]" data-testid="filter-label">
             <SelectValue placeholder="Label" />
           </SelectTrigger>
           <SelectContent>
@@ -99,7 +99,7 @@ export default function TaskList({ scope, title, subtitle }) {
         </Select>
         {isAdmin && (
           <Select value={assigneeId} onValueChange={setAssigneeId}>
-            <SelectTrigger className="w-[160px]" data-testid="filter-assignee">
+            <SelectTrigger className="w-full sm:w-[160px]" data-testid="filter-assignee">
               <SelectValue placeholder="Assignee" />
             </SelectTrigger>
             <SelectContent>
@@ -109,7 +109,7 @@ export default function TaskList({ scope, title, subtitle }) {
           </Select>
         )}
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[130px]" data-testid="filter-status">
+          <SelectTrigger className="w-full sm:w-[130px]" data-testid="filter-status">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -119,7 +119,7 @@ export default function TaskList({ scope, title, subtitle }) {
           </SelectContent>
         </Select>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-[150px]" data-testid="filter-sort">
+          <SelectTrigger className="w-full sm:w-[150px]" data-testid="filter-sort">
             <SelectValue placeholder="Sort" />
           </SelectTrigger>
           <SelectContent>
@@ -135,7 +135,7 @@ export default function TaskList({ scope, title, subtitle }) {
       <div className="rounded-lg border border-border/60 overflow-hidden bg-card/20">
         {loading && <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>}
         {!loading && tasks.length === 0 && (
-          <div className="p-16 text-center">
+          <div className="p-8 text-center sm:p-16">
             <div className="mx-auto w-14 h-14 rounded-full bg-primary/10 grid place-items-center mb-4">
               <Filter className="w-6 h-6 text-primary" />
             </div>

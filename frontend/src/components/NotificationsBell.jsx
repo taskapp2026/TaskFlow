@@ -40,7 +40,7 @@ export default function NotificationsBell() {
       <PopoverTrigger asChild>
         <button
           data-testid="notifications-bell"
-          className="relative rounded-full p-2 hover:bg-muted transition-colors"
+          className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-muted transition-colors"
           aria-label="Notifications"
         >
           <Bell className="w-5 h-5" />
@@ -54,7 +54,7 @@ export default function NotificationsBell() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[380px] p-0 bg-popover" data-testid="notifications-panel">
+      <PopoverContent align="end" className="w-[calc(100vw-1.5rem)] max-w-[380px] p-0 bg-popover" data-testid="notifications-panel">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div>
             <div className="font-display font-bold text-base">Notifications</div>
@@ -64,7 +64,7 @@ export default function NotificationsBell() {
             <Check className="w-3 h-3" /> Mark all read
           </button>
         </div>
-        <ScrollArea className="max-h-[420px]">
+        <ScrollArea className="max-h-[min(420px,70dvh)]">
           {items.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">No notifications yet</div>
           ) : (

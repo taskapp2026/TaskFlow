@@ -11,13 +11,13 @@ export default function TaskRow({ task, onToggle, labels = [], users = [] }) {
   return (
     <div
       data-testid={`task-row-${task.id}`}
-      className="group flex items-start gap-3 px-4 py-3 border-b border-border/40 hover:bg-muted/40 transition-colors"
+      className="group flex items-start gap-3 px-3 py-3 border-b border-border/40 hover:bg-muted/40 transition-colors sm:px-4"
     >
       <button
         aria-label="Toggle complete"
         data-testid={`task-toggle-${task.id}`}
         onClick={(e) => { e.stopPropagation(); onToggle(task); }}
-        className={cn("tf-check mt-0.5", task.completed && "checked", `priority-border-${task.priority}`)}
+        className={cn("tf-check mt-0.5 shrink-0", task.completed && "checked", `priority-border-${task.priority}`)}
         style={{ borderColor: !task.completed ? `hsl(var(--priority-${task.priority.slice(1)}))` : undefined }}
       >
         <Check className="w-3 h-3 tf-tick" strokeWidth={3} />
@@ -45,7 +45,7 @@ export default function TaskRow({ task, onToggle, labels = [], users = [] }) {
             );
           })}
         </div>
-        <div className="flex items-center gap-3 mt-1 text-[11.5px] text-muted-foreground font-mono">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11.5px] text-muted-foreground font-mono">
           {task.due_date && (
             <span className={cn(isOverdue && "text-destructive")}>
               {format(new Date(task.due_date), "MMM dd")}

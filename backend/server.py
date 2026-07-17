@@ -65,11 +65,17 @@ if COOKIE_SAMESITE not in ("lax", "strict", "none"):
     COOKIE_SAMESITE = "lax"
 COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN") or None
 CORS_ORIGINS = env_list("CORS_ORIGINS", "http://localhost:3000")
+ENABLE_DOCS = env_bool("ENABLE_DOCS", False)
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
-app = FastAPI(title="TaskFlow API")
+app = FastAPI(
+    title="TaskFlow API",
+    docs_url="/docs" if ENABLE_DOCS else None,
+    redoc_url="/redoc" if ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_DOCS else None,
+)
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)

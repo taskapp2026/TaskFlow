@@ -18,12 +18,12 @@ export default function UserTasks() {
   }, [selected]);
 
   return (
-    <div className="max-w-6xl mx-auto w-full pt-8">
-      <h1 className="text-4xl sm:text-5xl font-display font-bold tracking-tight leading-none">User-wise Tasks</h1>
+    <div className="max-w-6xl mx-auto w-full pt-6 pb-20 md:pt-8">
+      <h1 className="text-3xl sm:text-5xl font-display font-bold tracking-tight leading-none">User-wise Tasks</h1>
       <p className="text-muted-foreground mt-2 text-sm">Drill down into any team member's workload.</p>
 
-      <div className="mt-6 grid md:grid-cols-3 gap-6">
-        <div className="rounded-xl border border-border/60 bg-card/30 p-2 h-fit">
+      <div className="mt-6 grid gap-4 md:grid-cols-3 md:gap-6">
+        <div className="rounded-xl border border-border/60 bg-card/30 p-2 h-fit max-h-[40dvh] overflow-y-auto md:max-h-none">
           {users.map((u) => (
             <button
               key={u.id}
@@ -32,7 +32,7 @@ export default function UserTasks() {
               className={`w-full text-left p-3 rounded-lg hover:bg-muted transition-colors ${selected === u.id ? "bg-primary/10" : ""}`}
             >
               <div className="font-medium text-sm">{u.name}</div>
-              <div className="text-xs text-muted-foreground font-mono">{u.email}</div>
+              <div className="text-xs text-muted-foreground font-mono break-all">{u.email}</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1">{u.role}</div>
             </button>
           ))}
@@ -42,7 +42,7 @@ export default function UserTasks() {
           {!summary && <div className="text-sm text-muted-foreground">Select a user to view their tasks.</div>}
           {summary && (
             <>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                   ["Total", summary.total],
                   ["Completed", summary.completed],
@@ -51,15 +51,15 @@ export default function UserTasks() {
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-xl border border-border/60 bg-card/40 p-4">
                     <div className="overline">{k}</div>
-                    <div className="font-display text-3xl font-bold tracking-tight leading-none mt-1">{v}</div>
+                    <div className="font-display text-2xl font-bold tracking-tight leading-none mt-1 sm:text-3xl">{v}</div>
                   </div>
                 ))}
               </div>
               <div className="rounded-xl border border-border/60 bg-card/30 divide-y divide-border/40">
                 {summary.tasks.map((t) => (
                   <Link key={t.id} to={`/app/task/${t.id}`} className="block p-3 hover:bg-muted transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-sm">{t.name}</div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-medium text-sm break-words">{t.name}</div>
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono priority-${t.priority}`}>{t.priority}</span>
                     </div>
                     <div className="text-xs text-muted-foreground font-mono">{t.due_date || "no due date"}</div>

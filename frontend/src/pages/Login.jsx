@@ -33,7 +33,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
+    <div className="min-h-[100dvh] grid lg:grid-cols-2">
       <div className="hidden lg:block relative overflow-hidden">
         <img
           src="https://images.pexels.com/photos/18599565/pexels-photo-18599565.jpeg"
@@ -64,7 +64,7 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center p-6">
+      <div className="flex items-center justify-center p-4 sm:p-6">
         <form onSubmit={submit} className="w-full max-w-sm" data-testid="login-form">
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 grid place-items-center">

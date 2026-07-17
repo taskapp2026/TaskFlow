@@ -62,19 +62,19 @@ export default function StaffManagement() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto w-full pt-8">
-      <div className="flex items-end justify-between mb-8">
+    <div className="max-w-5xl mx-auto w-full pt-6 pb-20 md:pt-8">
+      <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-end sm:justify-between sm:mb-8">
         <div>
-          <h1 className="text-4xl sm:text-5xl font-display font-bold tracking-tight leading-none">Staff Management</h1>
+          <h1 className="text-3xl sm:text-5xl font-display font-bold tracking-tight leading-none">Staff Management</h1>
           <p className="text-muted-foreground mt-2 text-sm">Create, edit, disable or remove team members.</p>
         </div>
-        <Button onClick={openNew} className="rounded-full" data-testid="add-staff-btn">
+        <Button onClick={openNew} className="w-full rounded-full sm:w-auto" data-testid="add-staff-btn">
           <Plus className="w-4 h-4 mr-1" /> Add User
         </Button>
       </div>
 
-      <div className="rounded-xl border border-border/60 bg-card/30 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="rounded-xl border border-border/60 bg-card/30 overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-muted/40">
             <tr>
               <th className="text-left overline p-3">Name</th>
@@ -88,7 +88,7 @@ export default function StaffManagement() {
             {users.map((u) => (
               <tr key={u.id} className="border-t border-border/40" data-testid={`staff-row-${u.id}`}>
                 <td className="p-3 font-medium">{u.name}</td>
-                <td className="p-3 font-mono text-xs">{u.email}</td>
+                <td className="p-3 font-mono text-xs break-all">{u.email}</td>
                 <td className="p-3">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] border ${u.role === "admin" ? "border-primary/40 text-primary bg-primary/10" : "border-border"}`}>
                     {u.role}
@@ -98,11 +98,11 @@ export default function StaffManagement() {
                   {u.disabled ? <span className="text-destructive">Disabled</span> : <span className="text-green-500">Active</span>}
                 </td>
                 <td className="p-3 text-right space-x-1">
-                  <button onClick={() => openEdit(u)} className="p-2 rounded hover:bg-muted" title="Edit" data-testid={`edit-user-${u.id}`}><Edit className="w-4 h-4" /></button>
-                  <button onClick={() => toggleDisable(u)} className="p-2 rounded hover:bg-muted" title={u.disabled ? "Enable" : "Disable"} data-testid={`toggle-user-${u.id}`}>
+                  <button onClick={() => openEdit(u)} className="inline-grid h-9 w-9 place-items-center rounded hover:bg-muted" title="Edit" data-testid={`edit-user-${u.id}`}><Edit className="w-4 h-4" /></button>
+                  <button onClick={() => toggleDisable(u)} className="inline-grid h-9 w-9 place-items-center rounded hover:bg-muted" title={u.disabled ? "Enable" : "Disable"} data-testid={`toggle-user-${u.id}`}>
                     {u.disabled ? <Shield className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />}
                   </button>
-                  <button onClick={() => remove(u)} className="p-2 rounded hover:bg-muted text-destructive" title="Delete" data-testid={`delete-user-${u.id}`}><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => remove(u)} className="inline-grid h-9 w-9 place-items-center rounded hover:bg-muted text-destructive" title="Delete" data-testid={`delete-user-${u.id}`}><Trash2 className="w-4 h-4" /></button>
                 </td>
               </tr>
             ))}

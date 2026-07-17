@@ -127,14 +127,15 @@ export default function TaskDetail() {
   const labelMap = new Map(labels.map((l) => [l.id, l]));
 
   return (
-    <div className="max-w-4xl mx-auto w-full pt-6 pb-24" data-testid="task-detail">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">
+    <div className="max-w-4xl mx-auto w-full pt-4 pb-24 md:pt-6" data-testid="task-detail">
+      <button onClick={() => navigate(-1)} className="flex min-h-9 items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-3 md:mb-4">
         <ArrowLeft className="w-3 h-3" /> Back
       </button>
 
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-3">
+        <div className="flex items-start gap-3 sm:flex-1">
         <button
-          className={cn("tf-check mt-2", task.completed && "checked")}
+          className={cn("tf-check mt-2 shrink-0", task.completed && "checked")}
           onClick={toggleComplete}
           data-testid="detail-toggle-complete"
         >
@@ -153,32 +154,35 @@ export default function TaskDetail() {
               );
             })}
           </div>
-          <h1 className={cn("mt-2 font-display text-3xl sm:text-4xl font-bold tracking-tight leading-tight", task.completed && "line-through text-muted-foreground")}>
+          <h1 className={cn("mt-2 font-display text-2xl sm:text-4xl font-bold tracking-tight leading-tight break-words", task.completed && "line-through text-muted-foreground")}>
             {task.name}
           </h1>
-          <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-muted-foreground font-mono">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground font-mono">
             {task.due_date && <span>Due {format(new Date(task.due_date), "PPP")}{task.due_time ? ` · ${task.due_time}` : ""}</span>}
             {assignee && <span>Assigned to @{assignee.name}</span>}
             <span>Created {new Date(task.created_at).toLocaleDateString()}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        </div>
+        <div className="flex w-full gap-2 sm:w-auto">
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} data-testid="detail-edit-btn"><Edit className="w-4 h-4" /></Button>
           <Button variant="outline" size="sm" onClick={deleteTask} data-testid="detail-delete-btn" className="hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
-          <Button size="sm" onClick={toggleComplete} className="rounded-full" data-testid="detail-complete-btn">
+          <Button size="sm" onClick={toggleComplete} className="flex-1 rounded-full sm:flex-none" data-testid="detail-complete-btn">
             {task.completed ? "Reopen" : "Complete"}
           </Button>
         </div>
       </div>
 
       <Tabs defaultValue="overview" className="mt-8">
-        <TabsList className="border-b w-full justify-start rounded-none bg-transparent h-auto p-0 gap-1">
+        <div className="overflow-x-auto border-b">
+        <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent h-auto p-0 gap-1">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="subtasks" data-testid="tab-subtasks">Subtasks ({subtaskDone}/{subtaskTotal})</TabsTrigger>
           <TabsTrigger value="attachments" data-testid="tab-attachments">Attachments ({attachments.length})</TabsTrigger>
           <TabsTrigger value="comments" data-testid="tab-comments">Comments ({comments.length})</TabsTrigger>
           <TabsTrigger value="activity" data-testid="tab-activity">Activity</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="overview" className="mt-6 space-y-4">
           <div>
@@ -208,9 +212,9 @@ export default function TaskDetail() {
             ))}
             {subtaskTotal === 0 && <div className="p-3 text-sm text-muted-foreground">No subtasks yet.</div>}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Input placeholder="Add subtask..." value={newSubtask} onChange={(e) => setNewSubtask(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSubtask()} data-testid="subtask-input" />
-            <Button onClick={addSubtask} className="rounded-full" data-testid="subtask-add-btn">Add</Button>
+            <Button onClick={addSubtask} className="rounded-full sm:w-auto" data-testid="subtask-add-btn">Add</Button>
           </div>
         </TabsContent>
 
@@ -220,7 +224,7 @@ export default function TaskDetail() {
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             className={cn(
-              "rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer",
+              "rounded-lg border-2 border-dashed p-5 text-center transition-colors cursor-pointer sm:p-8",
               dragOver ? "border-primary bg-primary/5" : "border-border/60 bg-card/20"
             )}
             onClick={() => fileRef.current?.click()}
@@ -228,7 +232,7 @@ export default function TaskDetail() {
           >
             <Upload className="w-6 h-6 mx-auto text-muted-foreground" />
             <div className="mt-2 text-sm">Drag & drop or click to upload</div>
-            <div className="text-xs text-muted-foreground">Images, PDF, Word, Excel, PowerPoint, ZIP, video, audio</div>
+              <div className="text-xs text-muted-foreground">Images, PDF, Word, Excel, PowerPoint, ZIP, video, audio</div>
             <input
               ref={fileRef}
               type="file"
@@ -251,11 +255,11 @@ export default function TaskDetail() {
                   >
                     {a.original_filename}
                   </a>
-                  <div className="text-[11px] text-muted-foreground font-mono">
+                  <div className="text-[11px] text-muted-foreground font-mono break-words">
                     {Math.round((a.size || 0) / 1024)} KB · {a.uploaded_by_name}
                   </div>
                 </div>
-                <button onClick={() => deleteAttachment(a)} className="text-muted-foreground hover:text-destructive" data-testid={`attachment-delete-${a.id}`}><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => deleteAttachment(a)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive" data-testid={`attachment-delete-${a.id}`}><Trash2 className="w-4 h-4" /></button>
               </div>
             ))}
             {attachments.length === 0 && <div className="text-sm text-muted-foreground p-2">No attachments.</div>}
@@ -266,13 +270,13 @@ export default function TaskDetail() {
           <div className="space-y-2">
             {comments.map((c) => (
               <div key={c.id} className="p-3 rounded-lg border border-border/60 bg-card/30" data-testid={`comment-${c.id}`}>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm font-semibold">{c.user_name}</div>
                   <div className="text-[11px] text-muted-foreground font-mono">
                     {new Date(c.created_at).toLocaleString()} {c.edited && "(edited)"}
                   </div>
                 </div>
-                <div className="text-sm mt-1 whitespace-pre-wrap">{c.body}</div>
+                <div className="text-sm mt-1 whitespace-pre-wrap break-words">{c.body}</div>
                 {(c.user_id === user?.id || isAdmin) && (
                   <button onClick={() => deleteComment(c)} className="text-[11px] text-muted-foreground hover:text-destructive mt-1">Delete</button>
                 )}
@@ -282,22 +286,22 @@ export default function TaskDetail() {
           </div>
           <div className="flex gap-2 items-start">
             <Textarea placeholder="Add a comment..." value={newComment} onChange={(e) => setNewComment(e.target.value)} rows={2} data-testid="comment-input" />
-            <Button onClick={addComment} className="rounded-full" data-testid="comment-submit"><Send className="w-4 h-4" /></Button>
+            <Button onClick={addComment} className="h-10 w-10 shrink-0 rounded-full p-0" data-testid="comment-submit"><Send className="w-4 h-4" /></Button>
           </div>
         </TabsContent>
 
         <TabsContent value="activity" className="mt-6">
           <div className="rounded-lg border border-border/60 bg-card/30 divide-y divide-border/40">
             {activities.map((a) => (
-              <div key={a.id} className="p-3 flex items-start gap-3" data-testid={`activity-${a.id}`}>
-                <span className="font-mono text-[11px] text-muted-foreground w-32 shrink-0 mt-0.5">
+              <div key={a.id} className="p-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3" data-testid={`activity-${a.id}`}>
+                <span className="font-mono text-[11px] text-muted-foreground sm:w-32 sm:shrink-0 sm:mt-0.5">
                   {new Date(a.created_at).toLocaleString()}
                 </span>
                 <div className="flex-1 min-w-0 text-sm">
                   <span className="font-medium">{a.user_name}</span>{" "}
                   <span className="text-primary font-mono text-xs">{a.action.replaceAll("_", " ")}</span>
                   {a.field && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
+                    <div className="text-xs text-muted-foreground mt-0.5 break-words">
                       {a.field}: {JSON.stringify(a.old_value) ?? "—"} → {JSON.stringify(a.new_value) ?? "—"}
                     </div>
                   )}

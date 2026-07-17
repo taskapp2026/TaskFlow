@@ -13,14 +13,14 @@ const priorityColors = {
 
 function Stat({ label, value, icon: Icon, accent = "primary", testId }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card/40 p-5" data-testid={testId}>
+    <div className="rounded-xl border border-border/60 bg-card/40 p-4 sm:p-5" data-testid={testId}>
       <div className="flex items-center justify-between">
         <div className="overline">{label}</div>
         <div className={`w-8 h-8 rounded-lg grid place-items-center bg-${accent}/10 text-${accent}`}>
           <Icon className="w-4 h-4" />
         </div>
       </div>
-      <div className="mt-3 font-display text-4xl font-bold tracking-tight leading-none">{value}</div>
+      <div className="mt-3 font-display text-3xl font-bold tracking-tight leading-none sm:text-4xl">{value}</div>
     </div>
   );
 }
@@ -40,21 +40,21 @@ export default function Dashboard() {
   const perUser = (data.per_user || []).map((u) => ({ name: u.name, Completed: u.completed, Pending: u.pending, Overdue: u.overdue }));
 
   return (
-    <div className="max-w-6xl mx-auto w-full pt-8 pb-24">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-6xl mx-auto w-full pt-6 pb-24 md:pt-8">
+      <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between sm:mb-8">
         <div>
-          <h1 className="text-4xl sm:text-5xl font-display font-bold tracking-tight leading-none">
+          <h1 className="text-3xl sm:text-5xl font-display font-bold tracking-tight leading-none">
             {isAdmin ? "Admin Dashboard" : "My Dashboard"}
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">Live workspace metrics.</p>
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <div className="overline">Completion Rate</div>
-          <div className="font-display text-4xl font-bold text-primary">{data.completion_rate}%</div>
+          <div className="font-display text-3xl font-bold text-primary sm:text-4xl">{data.completion_rate}%</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
         <Stat label="Total" value={data.total} icon={ListTodo} testId="stat-total" />
         <Stat label="Completed" value={data.completed} icon={CheckCircle2} testId="stat-completed" />
         <Stat label="Pending" value={data.pending} icon={Clock3} testId="stat-pending" />
@@ -64,7 +64,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <div className="rounded-xl border border-border/60 bg-card/40 p-5 lg:col-span-1">
+        <div className="rounded-xl border border-border/60 bg-card/40 p-4 sm:p-5 lg:col-span-1">
           <div className="overline mb-3">Priority Distribution</div>
           <div className="h-[220px]">
             <ResponsiveContainer>
@@ -80,20 +80,22 @@ export default function Dashboard() {
         </div>
 
         {isAdmin && (
-          <div className="rounded-xl border border-border/60 bg-card/40 p-5 lg:col-span-2">
+          <div className="rounded-xl border border-border/60 bg-card/40 p-4 sm:p-5 lg:col-span-2">
             <div className="overline mb-3">Tasks per User</div>
-            <div className="h-[220px]">
-              <ResponsiveContainer>
-                <BarChart data={perUser}>
-                  <XAxis dataKey="name" fontSize={11} />
-                  <YAxis fontSize={11} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="Completed" stackId="a" fill="hsl(var(--chart-3))" />
-                  <Bar dataKey="Pending" stackId="a" fill="hsl(var(--chart-1))" />
-                  <Bar dataKey="Overdue" stackId="a" fill="hsl(var(--chart-5))" />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="overflow-x-auto">
+              <div className="h-[220px] min-w-[420px]">
+                <ResponsiveContainer>
+                  <BarChart data={perUser}>
+                    <XAxis dataKey="name" fontSize={11} />
+                    <YAxis fontSize={11} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Completed" stackId="a" fill="hsl(var(--chart-3))" />
+                    <Bar dataKey="Pending" stackId="a" fill="hsl(var(--chart-1))" />
+                    <Bar dataKey="Overdue" stackId="a" fill="hsl(var(--chart-5))" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
@@ -103,8 +105,8 @@ export default function Dashboard() {
         <div className="overline mb-3">Recent Activity</div>
         <ul className="space-y-2">
           {(data.recent_activity || []).slice(0, 12).map((a) => (
-            <li key={a.id} className="text-sm flex items-center gap-3 py-1.5 border-b border-border/30 last:border-0">
-              <span className="font-mono text-[11px] text-muted-foreground w-32 shrink-0">
+            <li key={a.id} className="text-sm flex flex-col gap-1 py-1.5 border-b border-border/30 last:border-0 sm:flex-row sm:items-center sm:gap-3">
+              <span className="font-mono text-[11px] text-muted-foreground sm:w-32 sm:shrink-0">
                 {new Date(a.created_at).toLocaleString()}
               </span>
               <span className="font-medium">{a.user_name}</span>

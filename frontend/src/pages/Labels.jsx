@@ -40,11 +40,11 @@ export default function Labels() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto w-full pt-8">
-      <h1 className="text-4xl sm:text-5xl font-display font-bold tracking-tight leading-none">Labels</h1>
+    <div className="max-w-4xl mx-auto w-full pt-6 pb-20 md:pt-8">
+      <h1 className="text-3xl sm:text-5xl font-display font-bold tracking-tight leading-none">Labels</h1>
       <p className="text-muted-foreground mt-2 text-sm">Categorize tasks with colored labels.</p>
 
-      <form onSubmit={create} className="mt-8 p-5 rounded-xl border border-border/60 bg-card/40 space-y-3" data-testid="label-create-form">
+      <form onSubmit={create} className="mt-6 p-4 rounded-xl border border-border/60 bg-card/40 space-y-3 sm:mt-8 sm:p-5" data-testid="label-create-form">
         <div className="overline">Create a new label</div>
         <div className="grid md:grid-cols-2 gap-3">
           <Input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Label name" data-testid="label-name-input" />
@@ -56,13 +56,13 @@ export default function Labels() {
               key={c}
               type="button"
               onClick={() => setColor(c)}
-              className="w-7 h-7 rounded-full transition-transform hover:scale-110"
+              className="h-9 w-9 rounded-full transition-transform hover:scale-110 sm:h-7 sm:w-7"
               style={{ background: c, outline: color === c ? "2px solid hsl(var(--foreground))" : "2px solid transparent", outlineOffset: 2 }}
               aria-label={c}
               data-testid={`label-color-${c}`}
             />
           ))}
-          <Button type="submit" className="ml-auto rounded-full" data-testid="label-create-btn">
+          <Button type="submit" className="mt-2 w-full rounded-full sm:ml-auto sm:mt-0 sm:w-auto" data-testid="label-create-btn">
             <Plus className="w-4 h-4 mr-1" /> Add label
           </Button>
         </div>
@@ -71,15 +71,15 @@ export default function Labels() {
       <div className="mt-8 grid md:grid-cols-2 gap-2">
         {labels.length === 0 && <div className="text-sm text-muted-foreground p-4">No labels yet.</div>}
         {labels.map((l) => (
-          <div key={l.id} className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-card/30" data-testid={`label-row-${l.id}`}>
-            <div className="flex items-center gap-3">
+          <div key={l.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/60 bg-card/30" data-testid={`label-row-${l.id}`}>
+            <div className="flex min-w-0 items-center gap-3">
               <span className="w-3 h-3 rounded-full" style={{ background: l.color }} />
-              <div>
-                <div className="font-medium text-sm">{l.name}</div>
-                {l.description && <div className="text-xs text-muted-foreground">{l.description}</div>}
+              <div className="min-w-0">
+                <div className="font-medium text-sm truncate">{l.name}</div>
+                {l.description && <div className="text-xs text-muted-foreground break-words">{l.description}</div>}
               </div>
             </div>
-            <button onClick={() => remove(l.id)} className="text-muted-foreground hover:text-destructive" data-testid={`label-delete-${l.id}`}>
+            <button onClick={() => remove(l.id)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive" data-testid={`label-delete-${l.id}`}>
               <Trash2 className="w-4 h-4" />
             </button>
           </div>

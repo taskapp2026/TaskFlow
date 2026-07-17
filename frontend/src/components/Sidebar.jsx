@@ -41,13 +41,13 @@ const bottomNav = [
   { to: "/app/profile", label: "Profile", icon: UserCircle, testId: "nav-profile" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ className, onNavigate }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const isAdmin = user?.role === "admin";
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-border/60 flex flex-col bg-card/40" data-testid="sidebar">
+    <aside className={cn("w-[260px] shrink-0 border-r border-border/60 flex flex-col bg-card/40", className)} data-testid="sidebar">
       <div className="px-5 py-5 flex items-center gap-2 border-b border-border/60">
         <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 grid place-items-center">
           <Zap className="w-4 h-4 text-primary" strokeWidth={2.5} />
@@ -66,6 +66,7 @@ export default function Sidebar() {
               key={n.to}
               to={n.to}
               data-testid={n.testId}
+              onClick={onNavigate}
               className={({ isActive }) => cn("nav-item", isActive && "active")}
             >
               <n.icon className="w-4 h-4" />
@@ -83,6 +84,7 @@ export default function Sidebar() {
                   key={n.to}
                   to={n.to}
                   data-testid={n.testId}
+                  onClick={onNavigate}
                   className={({ isActive }) => cn("nav-item", isActive && "active")}
                 >
                   <n.icon className="w-4 h-4" />
@@ -100,6 +102,7 @@ export default function Sidebar() {
               key={n.to}
               to={n.to}
               data-testid={n.testId}
+              onClick={onNavigate}
               className={({ isActive }) => cn("nav-item", isActive && "active")}
             >
               <n.icon className="w-4 h-4" />

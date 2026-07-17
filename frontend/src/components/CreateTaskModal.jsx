@@ -106,12 +106,12 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[640px] p-0 gap-0 bg-popover" data-testid="create-task-modal">
-        <DialogHeader className="px-6 py-4 border-b">
+        <DialogHeader className="px-4 py-4 border-b sm:px-6">
           <DialogTitle className="font-display text-lg tracking-tight">
             {isEdit ? "Edit Task" : "Create Task"}
           </DialogTitle>
         </DialogHeader>
-        <div className="p-6 space-y-4">
+        <div className="max-h-[calc(100dvh-11rem)] overflow-y-auto p-4 space-y-4 sm:p-6">
           <div>
             <Input
               autoFocus
@@ -130,7 +130,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
             data-testid="task-description-input"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {isAdmin && (
               <div>
                 <div className="overline mb-1.5">Assign to</div>
@@ -167,10 +167,10 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
                 <PopoverTrigger asChild>
                   <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !dueDate && "text-muted-foreground")} data-testid="task-duedate-btn">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dueDate ? format(dueDate, "PPP") : "Pick a date"}
+                    <span className="truncate">{dueDate ? format(dueDate, "PPP") : "Pick a date"}</span>
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                <PopoverContent className="w-auto max-w-[calc(100vw-2rem)] p-0 bg-popover" align="start">
                   <Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus />
                 </PopoverContent>
               </Popover>
@@ -197,7 +197,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
                     onClick={() => toggleLabel(l.id)}
                     data-testid={`label-chip-${l.id}`}
                     className={cn(
-                      "px-2.5 py-1 rounded-full text-xs border transition-colors",
+                      "min-h-8 px-2.5 py-1 rounded-full text-xs border transition-colors",
                       on ? "text-white" : "bg-transparent hover:bg-muted"
                     )}
                     style={{
@@ -227,9 +227,9 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
             </Select>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-muted/30">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} data-testid="task-cancel-btn">Cancel</Button>
-          <Button onClick={submit} disabled={saving} className="rounded-full px-6" data-testid="task-save-btn">
+        <div className="flex flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full sm:w-auto" data-testid="task-cancel-btn">Cancel</Button>
+          <Button onClick={submit} disabled={saving} className="w-full rounded-full px-6 sm:w-auto" data-testid="task-save-btn">
             {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Task"}
           </Button>
         </div>
