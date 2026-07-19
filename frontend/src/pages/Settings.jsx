@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 const RETENTION_PRESETS = [
   { value: "15", label: "Older than 15 days" },
@@ -56,49 +57,54 @@ export default function Settings() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [runningCleanup, setRunningCleanup] = useState(false);
+  const runOnce = useSingleFlight();
 
   const selectedDays = retention === "custom" ? Number(customDays) : Number(retention);
   const selectedIds = (preview?.items || []).map((item) => item.id);
 
   const loadCleanupPreview = async () => {
-    if (!selectedDays || selectedDays < 1) {
-      toast.error("Enter a valid retention window");
-      return;
-    }
-    setLoadingPreview(true);
-    try {
-      const { data } = await api.get("/admin/attachments/cleanup/preview", { params: { days: selectedDays } });
-      setPreview(data);
-      if (data.total_count === 0) {
-        toast.info("No attachments from tasks completed before this retention window");
+    await runOnce("cleanup-preview", async () => {
+      if (!selectedDays || selectedDays < 1) {
+        toast.error("Enter a valid retention window");
+        return;
       }
-    } catch (e) {
-      toast.error("Failed to load cleanup preview");
-    } finally {
-      setLoadingPreview(false);
-    }
+      setLoadingPreview(true);
+      try {
+        const { data } = await api.get("/admin/attachments/cleanup/preview", { params: { days: selectedDays } });
+        setPreview(data);
+        if (data.total_count === 0) {
+          toast.info("No attachments from tasks completed before this retention window");
+        }
+      } catch (e) {
+        toast.error("Failed to load cleanup preview");
+      } finally {
+        setLoadingPreview(false);
+      }
+    });
   };
 
   const runCleanup = async () => {
-    if (!preview?.total_count) return;
-    setRunningCleanup(true);
-    try {
-      const { data } = await api.post("/admin/attachments/cleanup", {
-        days: selectedDays,
-        attachment_ids: selectedIds,
-      });
-      if (data.failed_count) {
-        toast.error(`Cleanup finished with ${data.failed_count} failed file${data.failed_count === 1 ? "" : "s"}`);
-      } else {
-        toast.success(`Deleted ${data.deleted_count} attachment${data.deleted_count === 1 ? "" : "s"}`);
+    await runOnce("cleanup-run", async () => {
+      if (!preview?.total_count) return;
+      setRunningCleanup(true);
+      try {
+        const { data } = await api.post("/admin/attachments/cleanup", {
+          days: selectedDays,
+          attachment_ids: selectedIds,
+        });
+        if (data.failed_count) {
+          toast.error(`Cleanup finished with ${data.failed_count} failed file${data.failed_count === 1 ? "" : "s"}`);
+        } else {
+          toast.success(`Deleted ${data.deleted_count} attachment${data.deleted_count === 1 ? "" : "s"}`);
+        }
+        setConfirmOpen(false);
+        await loadCleanupPreview();
+      } catch (e) {
+        toast.error("Cleanup failed");
+      } finally {
+        setRunningCleanup(false);
       }
-      setConfirmOpen(false);
-      await loadCleanupPreview();
-    } catch (e) {
-      toast.error("Cleanup failed");
-    } finally {
-      setRunningCleanup(false);
-    }
+    });
   };
 
   return (

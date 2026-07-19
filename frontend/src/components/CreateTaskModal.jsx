@@ -12,6 +12,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 const priorities = [
   { v: "P1", label: "P1 · Highest" },
@@ -45,6 +46,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
   const [users, setUsers] = useState([]);
   const [labels, setLabels] = useState([]);
   const [saving, setSaving] = useState(false);
+  const runOnce = useSingleFlight();
 
   useEffect(() => {
     if (!open) return;
@@ -69,34 +71,36 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
   }, [open, initial]);
 
   const submit = async () => {
-    if (!name.trim()) { toast.error("Task name is required"); return; }
-    setSaving(true);
-    try {
-      const payload = {
-        name: name.trim(),
-        description,
-        assignee_id: isAdmin ? (assigneeId || null) : null,
-        priority,
-        label_ids: labelIds,
-        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
-        due_time: dueTime || null,
-        reminder: reminder === "none" ? null : { preset: reminder },
-      };
-      if (isEdit) {
-        const { data } = await api.patch(`/tasks/${initial.id}`, payload);
-        toast.success("Task updated");
-        onCreated?.(data);
-      } else {
-        const { data } = await api.post("/tasks", payload);
-        toast.success("Task created");
-        onCreated?.(data);
+    await runOnce(isEdit ? `save-task-${initial.id}` : "create-task", async () => {
+      if (!name.trim()) { toast.error("Task name is required"); return; }
+      setSaving(true);
+      try {
+        const payload = {
+          name: name.trim(),
+          description,
+          assignee_id: isAdmin ? (assigneeId || null) : null,
+          priority,
+          label_ids: labelIds,
+          due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
+          due_time: dueTime || null,
+          reminder: reminder === "none" ? null : { preset: reminder },
+        };
+        if (isEdit) {
+          const { data } = await api.patch(`/tasks/${initial.id}`, payload);
+          toast.success("Task updated");
+          onCreated?.(data);
+        } else {
+          const { data } = await api.post("/tasks", payload);
+          toast.success("Task created");
+          onCreated?.(data);
+        }
+        onOpenChange(false);
+      } catch (e) {
+        toast.error(e.response?.data?.detail || "Failed to save");
+      } finally {
+        setSaving(false);
       }
-      onOpenChange(false);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   const toggleLabel = (id) => {

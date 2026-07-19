@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api, { setUnauthorizedHandler } from "@/lib/api";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // null=checking, false=guest, obj=user
   const [loading, setLoading] = useState(true);
+  const runOnce = useSingleFlight();
 
   const refresh = useCallback(async () => {
     try {
@@ -32,10 +34,12 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    try {
-      await api.post("/auth/logout");
-    } catch (_) {}
-    setUser(false);
+    await runOnce("logout", async () => {
+      try {
+        await api.post("/auth/logout");
+      } catch (_) {}
+      setUser(false);
+    });
   };
 
   return (

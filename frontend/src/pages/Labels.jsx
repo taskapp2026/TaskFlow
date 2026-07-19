@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 const swatches = ["#e11d48","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6","#ec4899","#64748b"];
 
@@ -13,6 +14,7 @@ export default function Labels() {
   const [name, setName] = useState("");
   const [color, setColor] = useState(swatches[5]);
   const [description, setDescription] = useState("");
+  const runOnce = useSingleFlight();
 
   const load = async () => {
     const { data } = await api.get("/labels");
@@ -23,20 +25,24 @@ export default function Labels() {
 
   const create = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    try {
-      await api.post("/labels", { name: name.trim(), color, description });
-      setName(""); setDescription("");
-      toast.success("Label created");
-      load();
-    } catch (e) {
-      toast.error("Failed to create");
-    }
+    await runOnce("label-create", async () => {
+      if (!name.trim()) return;
+      try {
+        await api.post("/labels", { name: name.trim(), color, description });
+        setName(""); setDescription("");
+        toast.success("Label created");
+        load();
+      } catch (e) {
+        toast.error("Failed to create");
+      }
+    });
   };
 
   const remove = async (id) => {
-    await api.delete(`/labels/${id}`);
-    load();
+    await runOnce(`label-delete-${id}`, async () => {
+      await api.delete(`/labels/${id}`);
+      load();
+    });
   };
 
   return (

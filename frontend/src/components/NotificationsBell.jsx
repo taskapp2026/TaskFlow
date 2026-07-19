@@ -5,11 +5,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotificationsSocket } from "@/hooks/useNotificationsSocket";
 import { useNavigate } from "react-router-dom";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 export default function NotificationsBell() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const runOnce = useSingleFlight();
 
   const load = async () => {
     try {
@@ -24,15 +26,19 @@ export default function NotificationsBell() {
   const unread = items.filter((i) => !i.read).length;
 
   const markAll = async () => {
-    await api.post("/notifications/read-all");
-    load();
+    await runOnce("notifications-mark-all", async () => {
+      await api.post("/notifications/read-all");
+      load();
+    });
   };
 
   const clickItem = async (n) => {
-    if (!n.read) await api.post(`/notifications/${n.id}/read`);
-    if (n.task_id) navigate(`/app/task/${n.task_id}`);
-    setOpen(false);
-    load();
+    await runOnce(`notification-click-${n.id}`, async () => {
+      if (!n.read) await api.post(`/notifications/${n.id}/read`);
+      if (n.task_id) navigate(`/app/task/${n.task_id}`);
+      setOpen(false);
+      load();
+    });
   };
 
   return (

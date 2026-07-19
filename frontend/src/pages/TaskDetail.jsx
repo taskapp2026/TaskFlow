@@ -22,6 +22,7 @@ import CreateTaskModal from "@/components/CreateTaskModal";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 export default function TaskDetail() {
   const { taskId } = useParams();
@@ -41,6 +42,7 @@ export default function TaskDetail() {
   const [dragOver, setDragOver] = useState(false);
   const [attachmentToDelete, setAttachmentToDelete] = useState(null);
   const [deletingAttachment, setDeletingAttachment] = useState(false);
+  const runOnce = useSingleFlight();
 
   const loadAll = useCallback(async () => {
   try {
@@ -70,55 +72,71 @@ export default function TaskDetail() {
 }, [loadAll]);
 
   const toggleComplete = async () => {
-    const { data } = await api.patch(`/tasks/${taskId}`, { completed: !task.completed });
-    setTask(data);
-    loadAll();
+    await runOnce(`task-complete-${taskId}`, async () => {
+      const { data } = await api.patch(`/tasks/${taskId}`, { completed: !task.completed });
+      setTask(data);
+      loadAll();
+    });
   };
 
   const deleteTask = async () => {
-    if (!window.confirm("Delete this task and all its data?")) return;
-    await api.delete(`/tasks/${taskId}`);
-    toast.success("Task deleted");
-    navigate("/app/all");
+    await runOnce(`task-delete-${taskId}`, async () => {
+      if (!window.confirm("Delete this task and all its data?")) return;
+      await api.delete(`/tasks/${taskId}`);
+      toast.success("Task deleted");
+      navigate("/app/all");
+    });
   };
 
   const addSubtask = async () => {
-    if (!newSubtask.trim()) return;
-    await api.post(`/tasks/${taskId}/subtasks`, { title: newSubtask.trim(), priority: "P4" });
-    setNewSubtask("");
-    loadAll();
+    await runOnce(`subtask-add-${taskId}`, async () => {
+      if (!newSubtask.trim()) return;
+      await api.post(`/tasks/${taskId}/subtasks`, { title: newSubtask.trim(), priority: "P4" });
+      setNewSubtask("");
+      loadAll();
+    });
   };
   const toggleSubtask = async (s) => {
-    await api.patch(`/tasks/${taskId}/subtasks/${s.id}`, { completed: !s.completed });
-    loadAll();
+    await runOnce(`subtask-toggle-${s.id}`, async () => {
+      await api.patch(`/tasks/${taskId}/subtasks/${s.id}`, { completed: !s.completed });
+      loadAll();
+    });
   };
   const deleteSubtask = async (s) => {
-    await api.delete(`/tasks/${taskId}/subtasks/${s.id}`);
-    loadAll();
+    await runOnce(`subtask-delete-${s.id}`, async () => {
+      await api.delete(`/tasks/${taskId}/subtasks/${s.id}`);
+      loadAll();
+    });
   };
 
   const addComment = async () => {
-    if (!newComment.trim()) return;
-    await api.post(`/tasks/${taskId}/comments`, { body: newComment.trim() });
-    setNewComment("");
-    loadAll();
+    await runOnce(`comment-add-${taskId}`, async () => {
+      if (!newComment.trim()) return;
+      await api.post(`/tasks/${taskId}/comments`, { body: newComment.trim() });
+      setNewComment("");
+      loadAll();
+    });
   };
   const deleteComment = async (c) => {
-    await api.delete(`/tasks/${taskId}/comments/${c.id}`);
-    loadAll();
+    await runOnce(`comment-delete-${c.id}`, async () => {
+      await api.delete(`/tasks/${taskId}/comments/${c.id}`);
+      loadAll();
+    });
   };
 
   const uploadFiles = async (files) => {
-    for (const f of files) {
-      const fd = new FormData();
-      fd.append("file", f);
-      try {
-        await api.post(`/tasks/${taskId}/attachments`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-      } catch (e) {
-        toast.error(`Upload failed: ${f.name}`);
+    await runOnce(`attachments-upload-${taskId}`, async () => {
+      for (const f of files) {
+        const fd = new FormData();
+        fd.append("file", f);
+        try {
+          await api.post(`/tasks/${taskId}/attachments`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+        } catch (e) {
+          toast.error(`Upload failed: ${f.name}`);
+        }
       }
-    }
-    loadAll();
+      loadAll();
+    });
   };
   const onDrop = (e) => {
     e.preventDefault();
@@ -126,18 +144,20 @@ export default function TaskDetail() {
     uploadFiles(Array.from(e.dataTransfer.files));
   };
   const deleteAttachment = async () => {
-    if (!attachmentToDelete) return;
-    setDeletingAttachment(true);
-    try {
-      await api.delete(`/attachments/${attachmentToDelete.id}`);
-      toast.success("Attachment deleted");
-      setAttachmentToDelete(null);
-      loadAll();
-    } catch (e) {
-      toast.error("Failed to delete attachment");
-    } finally {
-      setDeletingAttachment(false);
-    }
+    await runOnce(`attachment-delete-${attachmentToDelete?.id || "none"}`, async () => {
+      if (!attachmentToDelete) return;
+      setDeletingAttachment(true);
+      try {
+        await api.delete(`/attachments/${attachmentToDelete.id}`);
+        toast.success("Attachment deleted");
+        setAttachmentToDelete(null);
+        loadAll();
+      } catch (e) {
+        toast.error("Failed to delete attachment");
+      } finally {
+        setDeletingAttachment(false);
+      }
+    });
   };
 
   if (!task) return <div className="p-8 text-sm text-muted-foreground">Loading...</div>;

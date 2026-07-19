@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Search, Filter } from "lucide-react";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 export default function TaskList({ scope, title, subtitle }) {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export default function TaskList({ scope, title, subtitle }) {
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("created");
   const [loading, setLoading] = useState(true);
+  const runOnce = useSingleFlight();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,13 +49,15 @@ export default function TaskList({ scope, title, subtitle }) {
   }, []);
 
   const toggleTask = async (t) => {
-    const optimistic = tasks.map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x));
-    setTasks(optimistic);
-    try {
-      await api.patch(`/tasks/${t.id}`, { completed: !t.completed });
-    } catch {
-      load();
-    }
+    await runOnce(`task-toggle-${t.id}`, async () => {
+      const optimistic = tasks.map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x));
+      setTasks(optimistic);
+      try {
+        await api.patch(`/tasks/${t.id}`, { completed: !t.completed });
+      } catch {
+        load();
+      }
+    });
   };
 
   return (

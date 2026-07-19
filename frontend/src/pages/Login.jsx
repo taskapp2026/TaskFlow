@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Eye, EyeOff, Zap } from "lucide-react";
 import { formatApiErrorDetail } from "@/lib/api";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -15,21 +16,24 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const runOnce = useSingleFlight();
 
   if (user && user.id) return <Navigate to="/app/all" replace />;
 
   const submit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await login(email, password);
-      toast.success("Welcome back");
-      navigate("/app/all");
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Login failed");
-    } finally {
-      setLoading(false);
-    }
+    await runOnce("login", async () => {
+      setLoading(true);
+      try {
+        await login(email, password);
+        toast.success("Welcome back");
+        navigate("/app/all");
+      } catch (err) {
+        toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Login failed");
+      } finally {
+        setLoading(false);
+      }
+    });
   };
 
   return (

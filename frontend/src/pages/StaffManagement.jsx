@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Eye, EyeOff, Plus, Trash2, ShieldOff, Shield, Edit } from "lucide-react";
 import { toast } from "sonner";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -37,6 +38,7 @@ export default function StaffManagement() {
   const [showPassword, setShowPassword] = useState(false);
   const [deletePreview, setDeletePreview] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const runOnce = useSingleFlight();
 
   const load = async () => {
     const { data } = await api.get("/users");
@@ -58,53 +60,61 @@ export default function StaffManagement() {
   };
 
   const submit = async () => {
-    try {
-      if (editing) {
-        const body = { ...form };
-        if (!body.password) delete body.password;
-        await api.patch(`/users/${editing.id}`, body);
-        toast.success("User updated");
-      } else {
-        await api.post("/users", form);
-        toast.success("User created");
+    await runOnce(editing ? `staff-save-${editing.id}` : "staff-create", async () => {
+      try {
+        if (editing) {
+          const body = { ...form };
+          if (!body.password) delete body.password;
+          await api.patch(`/users/${editing.id}`, body);
+          toast.success("User updated");
+        } else {
+          await api.post("/users", form);
+          toast.success("User created");
+        }
+        setOpen(false);
+        load();
+      } catch (e) {
+        toast.error(e.response?.data?.detail || "Failed");
       }
-      setOpen(false);
-      load();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed");
-    }
+    });
   };
 
   const openDeletePreview = async (u) => {
-    setDeleteLoading(true);
-    try {
-      const { data } = await api.get(`/users/${u.id}/delete-preview`);
-      setDeletePreview(data);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed to load delete preview");
-    } finally {
-      setDeleteLoading(false);
-    }
+    await runOnce(`staff-delete-preview-${u.id}`, async () => {
+      setDeleteLoading(true);
+      try {
+        const { data } = await api.get(`/users/${u.id}/delete-preview`);
+        setDeletePreview(data);
+      } catch (e) {
+        toast.error(e.response?.data?.detail || "Failed to load delete preview");
+      } finally {
+        setDeleteLoading(false);
+      }
+    });
   };
 
   const confirmDelete = async () => {
-    if (!deletePreview?.user) return;
-    setDeleteLoading(true);
-    try {
-      const { data } = await api.delete(`/users/${deletePreview.user.id}`);
-      toast.success(`Deleted user and ${data.deleted_task_count || 0} task${data.deleted_task_count === 1 ? "" : "s"}`);
-      setDeletePreview(null);
-      load();
-    } catch (e) {
-      const detail = e.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : detail?.message || "Failed to delete user");
-    } finally {
-      setDeleteLoading(false);
-    }
+    await runOnce(`staff-delete-${deletePreview?.user?.id || "none"}`, async () => {
+      if (!deletePreview?.user) return;
+      setDeleteLoading(true);
+      try {
+        const { data } = await api.delete(`/users/${deletePreview.user.id}`);
+        toast.success(`Deleted user and ${data.deleted_task_count || 0} task${data.deleted_task_count === 1 ? "" : "s"}`);
+        setDeletePreview(null);
+        load();
+      } catch (e) {
+        const detail = e.response?.data?.detail;
+        toast.error(typeof detail === "string" ? detail : detail?.message || "Failed to delete user");
+      } finally {
+        setDeleteLoading(false);
+      }
+    });
   };
   const toggleDisable = async (u) => {
-    await api.patch(`/users/${u.id}`, { disabled: !u.disabled });
-    load();
+    await runOnce(`staff-toggle-${u.id}`, async () => {
+      await api.patch(`/users/${u.id}`, { disabled: !u.disabled });
+      load();
+    });
   };
 
   return (

@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import useSingleFlight from "@/hooks/useSingleFlight";
 
 export default function NotificationsPage() {
   const [items, setItems] = useState([]);
+  const runOnce = useSingleFlight();
   const load = async () => {
     const { data } = await api.get("/notifications");
     setItems(data);
   };
   useEffect(() => { load(); }, []);
-  const markAll = async () => { await api.post("/notifications/read-all"); load(); };
+  const markAll = async () => {
+    await runOnce("notifications-page-mark-all", async () => {
+      await api.post("/notifications/read-all");
+      load();
+    });
+  };
 
   return (
     <div className="max-w-3xl mx-auto w-full pt-6 pb-20 md:pt-8">
