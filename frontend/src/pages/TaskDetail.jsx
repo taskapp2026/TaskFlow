@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Check, Trash2, Paperclip, Send, ArrowLeft, Upload, Edit, X } from "lucide-react";
+import { Check, Trash2, Paperclip, Send, ArrowLeft, Upload, Edit, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import { cn } from "@/lib/utils";
@@ -283,6 +283,14 @@ export default function TaskDetail() {
                     {Math.round((a.size || 0) / 1024)} KB · {a.uploaded_by_name}
                   </div>
                 </div>
+                <a
+                  href={`${API}/attachments/${a.id}/download?download=1`}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="Download attachment"
+                  data-testid={`attachment-download-${a.id}`}
+                >
+                  <Download className="w-4 h-4" />
+                </a>
                 {canDeleteAttachment(a) && (
                   <button onClick={() => setAttachmentToDelete(a)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive" data-testid={`attachment-delete-${a.id}`}><Trash2 className="w-4 h-4" /></button>
                 )}

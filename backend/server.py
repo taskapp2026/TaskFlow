@@ -1256,7 +1256,12 @@ async def upload_attachment(task_id: str, request: Request, file: UploadFile = F
 
 
 @api.get("/attachments/{attachment_id}/download")
-async def download_attachment(attachment_id: str, auth: Optional[str] = Query(None), request: Request = None):
+async def download_attachment(
+    attachment_id: str,
+    auth: Optional[str] = Query(None),
+    download: bool = Query(False),
+    request: Request = None,
+):
     # Auth: cookie OR bearer OR ?auth=
     user = None
     try:
@@ -1282,7 +1287,8 @@ async def download_attachment(attachment_id: str, auth: Optional[str] = Query(No
         raise HTTPException(403, "Forbidden")
     data, ctype = get_object(a["storage_path"])
     filename = a.get("original_filename", "attachment")
-    disposition = f"inline; filename*=UTF-8''{quote(filename)}"
+    disposition_type = "attachment" if download else "inline"
+    disposition = f"{disposition_type}; filename*=UTF-8''{quote(filename)}"
     return Response(content=data, media_type=a.get("content_type") or ctype,
                     headers={"Content-Disposition": disposition})
 
