@@ -70,7 +70,7 @@ export default function Settings() {
       const { data } = await api.get("/admin/attachments/cleanup/preview", { params: { days: selectedDays } });
       setPreview(data);
       if (data.total_count === 0) {
-        toast.info("No completed-task attachments match this retention window");
+        toast.info("No attachments from tasks completed before this retention window");
       }
     } catch (e) {
       toast.error("Failed to load cleanup preview");
@@ -121,7 +121,7 @@ export default function Settings() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="font-medium">Attachment Cleanup</div>
-              <div className="text-xs text-muted-foreground">Preview and delete old attachments from completed tasks only.</div>
+              <div className="text-xs text-muted-foreground">Preview attachments from tasks completed before the retention window.</div>
             </div>
             <Badge variant="outline" className="w-fit">Admin only</Badge>
           </div>
@@ -184,20 +184,22 @@ export default function Settings() {
                     </div>
                     <div className="min-w-0">
                       <div className="truncate">{item.task_name}</div>
-                      <div className="text-xs text-muted-foreground">Completed task</div>
+                      <div className="text-xs text-muted-foreground">
+                        Completed {item.completed_at ? new Date(item.completed_at).toLocaleDateString() : ""}
+                      </div>
                     </div>
                     <div className="min-w-0 text-xs text-muted-foreground">
                       <div className="truncate">Owner: {item.task_owner_name || "Unknown"}</div>
                       <div className="truncate">Uploader: {item.uploaded_by_name || "Unknown"}</div>
                     </div>
                     <div className="text-xs text-muted-foreground sm:text-right">
-                      <div>{item.age_days} days old</div>
-                      <div>{item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}</div>
+                      <div>{item.completed_age_days} days since completion</div>
+                      <div>Uploaded {item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}</div>
                     </div>
                   </div>
                 ))}
                 {preview.items.length === 0 && (
-                  <div className="p-3 text-sm text-muted-foreground">No eligible attachments. Active task files are never included.</div>
+                  <div className="p-3 text-sm text-muted-foreground">No eligible attachments. Active tasks and completed tasks without a completion date are never included.</div>
                 )}
               </div>
             </div>
@@ -210,7 +212,7 @@ export default function Settings() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete completed-task attachments?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove {preview?.total_count || 0} file{preview?.total_count === 1 ? "" : "s"} from Cloudflare R2 and mark the attachment metadata deleted. Attachments on active tasks are excluded.
+              This will permanently remove {preview?.total_count || 0} file{preview?.total_count === 1 ? "" : "s"} from Cloudflare R2 and mark the attachment metadata deleted. Only attachments from tasks completed before the retention window are included.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

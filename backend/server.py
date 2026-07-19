@@ -947,8 +947,26 @@ async def delete_comment(task_id: str, comment_id: str, user=Depends(get_current
 async def get_cleanup_eligible_attachments(days: int, attachment_ids: Optional[List[str]] = None) -> dict:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_iso = cutoff.isoformat()
+    completed_tasks = await db.tasks.find({
+        "completed": True,
+        "completed_at": {"$type": "string", "$lte": cutoff_iso},
+    }).sort("completed_at", 1).to_list(5000)
+
+    task_map = {}
+    for task in completed_tasks:
+        completed_at = task.get("completed_at")
+        completed_at_dt = iso_to_datetime(completed_at)
+        if completed_at_dt == datetime.min.replace(tzinfo=timezone.utc):
+            continue
+        if completed_at_dt > cutoff:
+            continue
+        task_map[str(task["_id"])] = task
+
+    if not task_map:
+        return {"items": [], "total_count": 0, "total_size": 0, "cutoff": cutoff_iso}
+
     query: Dict[str, Any] = {
-        "created_at": {"$lte": cutoff_iso},
+        "task_id": {"$in": list(task_map.keys())},
         "is_deleted": {"$ne": True},
     }
     if attachment_ids is not None:
@@ -958,17 +976,7 @@ async def get_cleanup_eligible_attachments(days: int, attachment_ids: Optional[L
     if not attachments:
         return {"items": [], "total_count": 0, "total_size": 0, "cutoff": cutoff_iso}
 
-    task_ids = list({a.get("task_id") for a in attachments if a.get("task_id")})
-    task_object_ids = []
-    for task_id in task_ids:
-        try:
-            task_object_ids.append(ObjectId(task_id))
-        except Exception:
-            continue
-    tasks = await db.tasks.find({"_id": {"$in": task_object_ids}, "completed": True}).to_list(5000)
-    task_map = {str(t["_id"]): t for t in tasks}
-
-    assignee_ids = list({t.get("assignee_id") for t in tasks if t.get("assignee_id")})
+    assignee_ids = list({t.get("assignee_id") for t in task_map.values() if t.get("assignee_id")})
     assignee_object_ids = []
     for user_id in assignee_ids:
         try:
@@ -986,7 +994,8 @@ async def get_cleanup_eligible_attachments(days: int, attachment_ids: Optional[L
         if not task:
             continue
         uploaded_at = attachment.get("created_at")
-        age_days = max((now - iso_to_datetime(uploaded_at)).days, 0)
+        completed_at = task.get("completed_at")
+        completed_age_days = max((now - iso_to_datetime(completed_at)).days, 0)
         size = int(attachment.get("size") or 0)
         total_size += size
         assignee = assignee_map.get(task.get("assignee_id"))
@@ -996,7 +1005,8 @@ async def get_cleanup_eligible_attachments(days: int, attachment_ids: Optional[L
             "content_type": attachment.get("content_type", ""),
             "size": size,
             "created_at": uploaded_at,
-            "age_days": age_days,
+            "completed_at": completed_at,
+            "completed_age_days": completed_age_days,
             "task_id": str(task["_id"]),
             "task_name": task.get("name", ""),
             "task_owner_name": assignee.get("name", "") if assignee else "",
