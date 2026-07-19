@@ -6,6 +6,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Check, Trash2, Paperclip, Send, ArrowLeft, Upload, Edit, X } from "lucide-react";
 import { toast } from "sonner";
 import CreateTaskModal from "@/components/CreateTaskModal";
@@ -29,6 +39,8 @@ export default function TaskDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const fileRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
+  const [attachmentToDelete, setAttachmentToDelete] = useState(null);
+  const [deletingAttachment, setDeletingAttachment] = useState(false);
 
   const loadAll = useCallback(async () => {
   try {
@@ -113,9 +125,19 @@ export default function TaskDetail() {
     setDragOver(false);
     uploadFiles(Array.from(e.dataTransfer.files));
   };
-  const deleteAttachment = async (a) => {
-    await api.delete(`/attachments/${a.id}`);
-    loadAll();
+  const deleteAttachment = async () => {
+    if (!attachmentToDelete) return;
+    setDeletingAttachment(true);
+    try {
+      await api.delete(`/attachments/${attachmentToDelete.id}`);
+      toast.success("Attachment deleted");
+      setAttachmentToDelete(null);
+      loadAll();
+    } catch (e) {
+      toast.error("Failed to delete attachment");
+    } finally {
+      setDeletingAttachment(false);
+    }
   };
 
   if (!task) return <div className="p-8 text-sm text-muted-foreground">Loading...</div>;
@@ -125,6 +147,7 @@ export default function TaskDetail() {
   const subtaskTotal = (task.subtasks || []).length;
   const subtaskPct = subtaskTotal ? (subtaskDone / subtaskTotal) * 100 : 0;
   const labelMap = new Map(labels.map((l) => [l.id, l]));
+  const canDeleteAttachment = (attachment) => isAdmin || attachment.uploaded_by === user?.id;
 
   return (
     <div className="max-w-4xl mx-auto w-full pt-4 pb-24 md:pt-6" data-testid="task-detail">
@@ -232,11 +255,12 @@ export default function TaskDetail() {
           >
             <Upload className="w-6 h-6 mx-auto text-muted-foreground" />
             <div className="mt-2 text-sm">Drag & drop or click to upload</div>
-              <div className="text-xs text-muted-foreground">Images, PDF, Word, Excel, PowerPoint, ZIP, video, audio</div>
+              <div className="text-xs text-muted-foreground">Images, PDF, Word, Excel, PowerPoint, TXT, CSV, RTF up to 25 MB</div>
             <input
               ref={fileRef}
               type="file"
               multiple
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
               className="hidden"
               onChange={(e) => uploadFiles(Array.from(e.target.files || []))}
               data-testid="attachment-input"
@@ -259,7 +283,9 @@ export default function TaskDetail() {
                     {Math.round((a.size || 0) / 1024)} KB · {a.uploaded_by_name}
                   </div>
                 </div>
-                <button onClick={() => deleteAttachment(a)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive" data-testid={`attachment-delete-${a.id}`}><Trash2 className="w-4 h-4" /></button>
+                {canDeleteAttachment(a) && (
+                  <button onClick={() => setAttachmentToDelete(a)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive" data-testid={`attachment-delete-${a.id}`}><Trash2 className="w-4 h-4" /></button>
+                )}
               </div>
             ))}
             {attachments.length === 0 && <div className="text-sm text-muted-foreground p-2">No attachments.</div>}
@@ -319,6 +345,29 @@ export default function TaskDetail() {
         initial={task}
         onCreated={() => loadAll()}
       />
+      <AlertDialog open={!!attachmentToDelete} onOpenChange={(open) => !open && setAttachmentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete attachment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove {attachmentToDelete?.original_filename || "this file"} from storage and hide it from the task.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingAttachment}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteAttachment();
+              }}
+              disabled={deletingAttachment}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

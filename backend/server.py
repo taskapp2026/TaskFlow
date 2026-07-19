@@ -53,11 +53,16 @@ R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "")
 R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
 R2_REGION = os.environ.get("R2_REGION", "auto")
+DEFAULT_ATTACHMENT_MAX_SIZE_BYTES = 25 * 1024 * 1024
 MAX_ATTACHMENT_SIZE_BYTES = int(
-    os.environ.get("MAX_ATTACHMENT_SIZE_BYTES", str(100 * 1024 * 1024))
+    os.environ.get("MAX_ATTACHMENT_SIZE_BYTES", str(DEFAULT_ATTACHMENT_MAX_SIZE_BYTES))
 )
-ALLOWED_ATTACHMENT_MIME_PREFIXES = ("image/", "video/")
+ALLOWED_ATTACHMENT_MIME_PREFIXES = ()
 ALLOWED_ATTACHMENT_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -68,7 +73,6 @@ ALLOWED_ATTACHMENT_MIME_TYPES = {
     "text/plain",
     "text/csv",
     "application/rtf",
-    "application/zip",
 }
 
 
@@ -174,6 +178,17 @@ def get_object(object_key: str) -> tuple[bytes, str]:
         raise HTTPException(status_code=502, detail="Attachment download failed")
 
 
+def delete_object(object_key: str):
+    client_obj = init_storage()
+    if not client_obj:
+        raise HTTPException(status_code=500, detail="Storage not configured")
+    try:
+        client_obj.delete_object(Bucket=R2_BUCKET_NAME, Key=object_key)
+    except (BotoCoreError, ClientError) as e:
+        logger.error(f"R2 delete failed for {object_key}: {e}")
+        raise HTTPException(status_code=502, detail="Attachment delete failed")
+
+
 def validate_attachment_upload(filename: str, content_type: str, data: bytes):
     if not filename:
         raise HTTPException(status_code=400, detail="Filename is required")
@@ -199,6 +214,18 @@ def build_attachment_object_key(task_id: str, filename: str) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     return f"{APP_NAME}/tasks/{task_id}/{timestamp}-{uuid.uuid4().hex}.{ext}"
+
+
+def iso_to_datetime(value: Optional[str]) -> datetime:
+    if not value:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 # =========================================================
@@ -358,6 +385,11 @@ class CommentUpdateIn(BaseModel):
     body: str
 
 
+class AttachmentCleanupIn(BaseModel):
+    days: int = Field(..., ge=1, le=3650)
+    attachment_ids: List[str] = Field(default_factory=list)
+
+
 # =========================================================
 # Utility
 # =========================================================
@@ -394,6 +426,22 @@ async def log_activity(task_id: str, user: dict, action: str, field: Optional[st
         "action": action,
         "field": field,
         "old_value": old_value,
+        "new_value": new_value,
+        "created_at": now_iso(),
+    }
+    if request:
+        entry["ip"] = request.client.host if request.client else None
+        entry["user_agent"] = request.headers.get("user-agent")
+    await db.activities.insert_one(entry)
+
+
+async def log_admin_activity(user: dict, action: str, new_value: Any = None, request: Optional[Request] = None):
+    entry = {
+        "task_id": None,
+        "user_id": str(user["_id"]),
+        "user_name": user.get("name", ""),
+        "user_email": user.get("email", ""),
+        "action": action,
         "new_value": new_value,
         "created_at": now_iso(),
     }
@@ -896,6 +944,140 @@ async def delete_comment(task_id: str, comment_id: str, user=Depends(get_current
 # ---------------------------------------------------------
 # Attachments
 # ---------------------------------------------------------
+async def get_cleanup_eligible_attachments(days: int, attachment_ids: Optional[List[str]] = None) -> dict:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_iso = cutoff.isoformat()
+    query: Dict[str, Any] = {
+        "created_at": {"$lte": cutoff_iso},
+        "is_deleted": {"$ne": True},
+    }
+    if attachment_ids is not None:
+        query["_id"] = {"$in": [oid(v) for v in attachment_ids]}
+
+    attachments = await db.attachments.find(query).sort("created_at", 1).to_list(5000)
+    if not attachments:
+        return {"items": [], "total_count": 0, "total_size": 0, "cutoff": cutoff_iso}
+
+    task_ids = list({a.get("task_id") for a in attachments if a.get("task_id")})
+    task_object_ids = []
+    for task_id in task_ids:
+        try:
+            task_object_ids.append(ObjectId(task_id))
+        except Exception:
+            continue
+    tasks = await db.tasks.find({"_id": {"$in": task_object_ids}, "completed": True}).to_list(5000)
+    task_map = {str(t["_id"]): t for t in tasks}
+
+    assignee_ids = list({t.get("assignee_id") for t in tasks if t.get("assignee_id")})
+    assignee_object_ids = []
+    for user_id in assignee_ids:
+        try:
+            assignee_object_ids.append(ObjectId(user_id))
+        except Exception:
+            continue
+    assignees = await db.users.find({"_id": {"$in": assignee_object_ids}}).to_list(5000)
+    assignee_map = {str(u["_id"]): u for u in assignees}
+
+    now = datetime.now(timezone.utc)
+    items = []
+    total_size = 0
+    for attachment in attachments:
+        task = task_map.get(attachment.get("task_id"))
+        if not task:
+            continue
+        uploaded_at = attachment.get("created_at")
+        age_days = max((now - iso_to_datetime(uploaded_at)).days, 0)
+        size = int(attachment.get("size") or 0)
+        total_size += size
+        assignee = assignee_map.get(task.get("assignee_id"))
+        items.append({
+            "id": str(attachment["_id"]),
+            "original_filename": attachment.get("original_filename", ""),
+            "content_type": attachment.get("content_type", ""),
+            "size": size,
+            "created_at": uploaded_at,
+            "age_days": age_days,
+            "task_id": str(task["_id"]),
+            "task_name": task.get("name", ""),
+            "task_owner_name": assignee.get("name", "") if assignee else "",
+            "uploaded_by_name": attachment.get("uploaded_by_name", ""),
+        })
+
+    return {
+        "items": items,
+        "total_count": len(items),
+        "total_size": total_size,
+        "cutoff": cutoff_iso,
+    }
+
+
+@api.get("/admin/attachments/cleanup/preview")
+async def preview_attachment_cleanup(days: int = Query(..., ge=1, le=3650), admin=Depends(require_admin)):
+    return await get_cleanup_eligible_attachments(days)
+
+
+@api.post("/admin/attachments/cleanup")
+async def run_attachment_cleanup(body: AttachmentCleanupIn, request: Request, admin=Depends(require_admin)):
+    if not body.attachment_ids:
+        raise HTTPException(status_code=400, detail="No attachments selected for cleanup")
+
+    preview = await get_cleanup_eligible_attachments(body.days, body.attachment_ids)
+    eligible_ids = {item["id"] for item in preview["items"]}
+    skipped_ids = [attachment_id for attachment_id in body.attachment_ids if attachment_id not in eligible_ids]
+    deleted = []
+    failed = []
+
+    for item in preview["items"]:
+        attachment = await db.attachments.find_one({"_id": oid(item["id"]), "is_deleted": {"$ne": True}})
+        if not attachment:
+            skipped_ids.append(item["id"])
+            continue
+        try:
+            delete_object(attachment["storage_path"])
+            await db.attachments.update_one(
+                {"_id": oid(item["id"])},
+                {"$set": {
+                    "is_deleted": True,
+                    "deleted_at": now_iso(),
+                    "deleted_by": str(admin["_id"]),
+                    "deleted_by_name": admin.get("name", ""),
+                    "delete_reason": f"admin_cleanup_{body.days}_days",
+                }},
+            )
+            deleted.append(item)
+        except HTTPException as e:
+            failed.append({"id": item["id"], "filename": item["original_filename"], "detail": e.detail})
+        except Exception as e:
+            logger.error(f"Attachment cleanup failed for {item['id']}: {e}")
+            failed.append({"id": item["id"], "filename": item["original_filename"], "detail": "Cleanup failed"})
+
+    await log_admin_activity(
+        admin,
+        "attachment_cleanup_run",
+        new_value={
+            "retention_days": body.days,
+            "requested_count": len(body.attachment_ids),
+            "eligible_count": preview["total_count"],
+            "deleted_count": len(deleted),
+            "failed_count": len(failed),
+            "skipped_count": len(skipped_ids),
+            "total_size": sum(item.get("size", 0) for item in deleted),
+        },
+        request=request,
+    )
+
+    return {
+        "ok": len(failed) == 0,
+        "retention_days": body.days,
+        "deleted_count": len(deleted),
+        "failed_count": len(failed),
+        "skipped_count": len(skipped_ids),
+        "deleted": deleted,
+        "failed": failed,
+        "skipped_ids": skipped_ids,
+    }
+
+
 @api.get("/tasks/{task_id}/attachments")
 async def list_attachments(task_id: str, user=Depends(get_current_user)):
     t = await db.tasks.find_one({"_id": oid(task_id)})
@@ -975,20 +1157,33 @@ async def download_attachment(attachment_id: str, auth: Optional[str] = Query(No
 
 @api.delete("/attachments/{attachment_id}")
 async def delete_attachment(attachment_id: str, request: Request, user=Depends(get_current_user)):
-    a = await db.attachments.find_one({"_id": oid(attachment_id)})
+    a = await db.attachments.find_one({"_id": oid(attachment_id), "is_deleted": {"$ne": True}})
     if not a:
         raise HTTPException(404, "Not found")
     t = await db.tasks.find_one({"_id": oid(a["task_id"])})
+    if not t:
+        raise HTTPException(404, "Task not found")
+    if user.get("role") != "admin" and t["assignee_id"] != str(user["_id"]):
+        raise HTTPException(403, "Forbidden")
     if user.get("role") != "admin" and a["uploaded_by"] != str(user["_id"]):
         raise HTTPException(403, "Forbidden")
-    await db.attachments.update_one({"_id": oid(attachment_id)}, {"$set": {"is_deleted": True}})
+    delete_object(a["storage_path"])
+    await db.attachments.update_one(
+        {"_id": oid(attachment_id)},
+        {"$set": {
+            "is_deleted": True,
+            "deleted_at": now_iso(),
+            "deleted_by": str(user["_id"]),
+            "deleted_by_name": user.get("name", ""),
+            "delete_reason": "user_delete",
+        }},
+    )
     await log_activity(a["task_id"], user, "attachment_deleted", old_value=a["original_filename"], request=request)
     actor_id = str(user["_id"])
-    if t:
-        if user.get("role") == "admin" and t["assignee_id"] != actor_id:
-            await notify(t["assignee_id"], a["task_id"], f"Admin deleted an attachment from '{t['name']}'", "delete")
-        elif user.get("role") == "staff":
-            await notify_admins(f"{user.get('name','Staff')} deleted an attachment from '{t['name']}'", a["task_id"], exclude_user_id=actor_id)
+    if user.get("role") == "admin" and t["assignee_id"] != actor_id:
+        await notify(t["assignee_id"], a["task_id"], f"Admin deleted an attachment from '{t['name']}'", "delete")
+    elif user.get("role") == "staff":
+        await notify_admins(f"{user.get('name','Staff')} deleted an attachment from '{t['name']}'", a["task_id"], exclude_user_id=actor_id)
     return {"ok": True}
 
 
