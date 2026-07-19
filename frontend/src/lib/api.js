@@ -8,9 +8,26 @@ const api = axios.create({
   withCredentials: true,
 });
 
+let onUnauthorized = null;
+let handlingUnauthorized = false;
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler;
+}
+
 api.interceptors.response.use(
   (r) => r,
   (err) => {
+    if (err.response?.status === 401 && onUnauthorized && !handlingUnauthorized) {
+      handlingUnauthorized = true;
+      try {
+        onUnauthorized();
+      } finally {
+        setTimeout(() => {
+          handlingUnauthorized = false;
+        }, 0);
+      }
+    }
     return Promise.reject(err);
   }
 );

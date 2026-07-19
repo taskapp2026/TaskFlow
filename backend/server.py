@@ -475,6 +475,79 @@ async def notify_admins(message: str, task_id: Optional[str] = None, exclude_use
         await notify(aid, task_id, message, "admin")
 
 
+async def task_delete_preview(task_query: dict) -> dict:
+    tasks = await db.tasks.find(task_query).sort("created_at", -1).to_list(5000)
+    task_ids = [str(t["_id"]) for t in tasks]
+    attachment_count = 0
+    attachment_size = 0
+    if task_ids:
+        pipeline = [
+            {"$match": {"task_id": {"$in": task_ids}, "is_deleted": {"$ne": True}}},
+            {"$group": {"_id": None, "count": {"$sum": 1}, "size": {"$sum": {"$ifNull": ["$size", 0]}}}},
+        ]
+        summary = await db.attachments.aggregate(pipeline).to_list(1)
+        if summary:
+            attachment_count = summary[0].get("count", 0)
+            attachment_size = summary[0].get("size", 0)
+    active_tasks = [t for t in tasks if not t.get("completed", False)]
+    return {
+        "tasks": tasks,
+        "task_ids": task_ids,
+        "task_count": len(tasks),
+        "active_task_count": len(active_tasks),
+        "completed_task_count": len(tasks) - len(active_tasks),
+        "attachment_count": attachment_count,
+        "attachment_size": attachment_size,
+    }
+
+
+async def delete_tasks_with_related_data(task_query: dict, actor: dict, request: Optional[Request] = None, reason: str = "task_delete") -> dict:
+    preview = await task_delete_preview(task_query)
+    task_ids = preview["task_ids"]
+    if not task_ids:
+        return {**preview, "deleted_task_count": 0, "deleted_attachment_count": 0}
+
+    attachments = await db.attachments.find({"task_id": {"$in": task_ids}, "is_deleted": {"$ne": True}}).to_list(10000)
+    failed = []
+    for attachment in attachments:
+        try:
+            storage_path = attachment.get("storage_path")
+            if not storage_path:
+                raise HTTPException(status_code=500, detail="Attachment storage path is missing")
+            delete_object(storage_path)
+        except HTTPException as e:
+            failed.append({
+                "id": str(attachment["_id"]),
+                "filename": attachment.get("original_filename", ""),
+                "detail": e.detail,
+            })
+    if failed:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Could not delete all task attachments from storage",
+                "failed_attachments": failed,
+            },
+        )
+
+    await db.tasks.delete_many({"_id": {"$in": [ObjectId(task_id) for task_id in task_ids]}})
+    await db.comments.delete_many({"task_id": {"$in": task_ids}})
+    await db.attachments.delete_many({"task_id": {"$in": task_ids}})
+    await db.notifications.delete_many({"task_id": {"$in": task_ids}})
+    await log_admin_activity(
+        actor,
+        "tasks_deleted",
+        new_value={
+            "reason": reason,
+            "task_count": preview["task_count"],
+            "attachment_count": len(attachments),
+            "task_ids": task_ids,
+        },
+        request=request,
+    )
+    return {**preview, "deleted_task_count": preview["task_count"], "deleted_attachment_count": len(attachments)}
+
+
 # =========================================================
 # WebSocket manager
 # =========================================================
@@ -525,7 +598,7 @@ async def login(body: LoginIn, response: Response):
 
 
 @api.post("/auth/logout")
-async def logout(response: Response, user=Depends(get_current_user)):
+async def logout(response: Response):
     clear_auth_cookies(response)
     return {"ok": True}
 
@@ -587,11 +660,62 @@ async def update_user(user_id: str, body: UserUpdateIn, admin=Depends(require_ad
 
 
 @api.delete("/users/{user_id}")
-async def delete_user(user_id: str, admin=Depends(require_admin)):
+async def delete_user(user_id: str, request: Request, admin=Depends(require_admin)):
     if str(admin["_id"]) == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    u = await db.users.find_one({"_id": oid(user_id)})
+    if not u:
+        raise HTTPException(404, "User not found")
+    deletion = await delete_tasks_with_related_data({"assignee_id": user_id}, admin, request, reason="user_delete")
     await db.users.delete_one({"_id": oid(user_id)})
-    return {"ok": True}
+    await db.notifications.delete_many({"user_id": user_id})
+    await log_admin_activity(
+        admin,
+        "user_deleted",
+        new_value={
+            "deleted_user_id": user_id,
+            "deleted_user_email": u.get("email"),
+            "deleted_task_count": deletion["deleted_task_count"],
+            "deleted_attachment_count": deletion["deleted_attachment_count"],
+        },
+        request=request,
+    )
+    return {
+        "ok": True,
+        "deleted_user": user_public(u),
+        "deleted_task_count": deletion["deleted_task_count"],
+        "deleted_attachment_count": deletion["deleted_attachment_count"],
+    }
+
+
+@api.get("/users/{user_id}/delete-preview")
+async def preview_delete_user(user_id: str, admin=Depends(require_admin)):
+    if str(admin["_id"]) == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    u = await db.users.find_one({"_id": oid(user_id)})
+    if not u:
+        raise HTTPException(404, "User not found")
+    preview = await task_delete_preview({"assignee_id": user_id})
+    running_tasks = [
+        {
+            "id": str(t["_id"]),
+            "name": t.get("name", ""),
+            "priority": t.get("priority"),
+            "due_date": t.get("due_date"),
+            "created_at": t.get("created_at"),
+        }
+        for t in preview["tasks"]
+        if not t.get("completed", False)
+    ]
+    return {
+        "user": user_public(u),
+        "running_tasks": running_tasks,
+        "running_task_count": preview["active_task_count"],
+        "completed_task_count": preview["completed_task_count"],
+        "total_task_count": preview["task_count"],
+        "attachment_count": preview["attachment_count"],
+        "attachment_size": preview["attachment_size"],
+    }
 
 
 # =========================================================
@@ -802,17 +926,15 @@ async def update_task(task_id: str, body: TaskUpdateIn, request: Request, user=D
 
 
 @api.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, user=Depends(get_current_user)):
+async def delete_task(task_id: str, request: Request, user=Depends(get_current_user)):
     t = await db.tasks.find_one({"_id": oid(task_id)})
     if not t:
         raise HTTPException(404, "Task not found")
     if user.get("role") != "admin" and t["created_by"] != str(user["_id"]):
         raise HTTPException(403, "Forbidden")
-    await db.tasks.delete_one({"_id": oid(task_id)})
-    await db.comments.delete_many({"task_id": task_id})
-    await db.attachments.delete_many({"task_id": task_id})
+    result = await delete_tasks_with_related_data({"_id": oid(task_id)}, user, request, reason="task_delete")
     # activities are immutable — keep them
-    return {"ok": True}
+    return {"ok": True, "deleted_attachment_count": result["deleted_attachment_count"]}
 
 
 # ---------------------------------------------------------

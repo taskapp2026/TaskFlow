@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import api from "@/lib/api";
+import api, { setUnauthorizedHandler } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
@@ -19,6 +19,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(false);
+    });
     refresh();
   }, [refresh]);
 

@@ -4,8 +4,30 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Eye, EyeOff, Plus, Trash2, ShieldOff, Shield, Edit } from "lucide-react";
 import { toast } from "sonner";
+
+function formatBytes(bytes) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
 
 export default function StaffManagement() {
   const [users, setUsers] = useState([]);
@@ -13,6 +35,8 @@ export default function StaffManagement() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", name: "", role: "staff" });
   const [showPassword, setShowPassword] = useState(false);
+  const [deletePreview, setDeletePreview] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = async () => {
     const { data } = await api.get("/users");
@@ -51,10 +75,32 @@ export default function StaffManagement() {
     }
   };
 
-  const remove = async (u) => {
-    if (!window.confirm(`Delete ${u.name}?`)) return;
-    await api.delete(`/users/${u.id}`);
-    load();
+  const openDeletePreview = async (u) => {
+    setDeleteLoading(true);
+    try {
+      const { data } = await api.get(`/users/${u.id}/delete-preview`);
+      setDeletePreview(data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to load delete preview");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deletePreview?.user) return;
+    setDeleteLoading(true);
+    try {
+      const { data } = await api.delete(`/users/${deletePreview.user.id}`);
+      toast.success(`Deleted user and ${data.deleted_task_count || 0} task${data.deleted_task_count === 1 ? "" : "s"}`);
+      setDeletePreview(null);
+      load();
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : detail?.message || "Failed to delete user");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
   const toggleDisable = async (u) => {
     await api.patch(`/users/${u.id}`, { disabled: !u.disabled });
@@ -102,7 +148,7 @@ export default function StaffManagement() {
                   <button onClick={() => toggleDisable(u)} className="inline-grid h-9 w-9 place-items-center rounded hover:bg-muted" title={u.disabled ? "Enable" : "Disable"} data-testid={`toggle-user-${u.id}`}>
                     {u.disabled ? <Shield className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />}
                   </button>
-                  <button onClick={() => remove(u)} className="inline-grid h-9 w-9 place-items-center rounded hover:bg-muted text-destructive" title="Delete" data-testid={`delete-user-${u.id}`}><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openDeletePreview(u)} disabled={deleteLoading} className="inline-grid h-9 w-9 place-items-center rounded hover:bg-muted text-destructive disabled:opacity-50" title="Delete" data-testid={`delete-user-${u.id}`}><Trash2 className="w-4 h-4" /></button>
                 </td>
               </tr>
             ))}
@@ -150,6 +196,63 @@ export default function StaffManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deletePreview} onOpenChange={(open) => !open && setDeletePreview(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user and linked tasks?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete {deletePreview?.user?.name || "this user"}, {deletePreview?.total_task_count || 0} linked task{deletePreview?.total_task_count === 1 ? "" : "s"}, and {deletePreview?.attachment_count || 0} attachment{deletePreview?.attachment_count === 1 ? "" : "s"} from storage.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/60 p-3">
+              <div>
+                <div className="text-xs text-muted-foreground">Running tasks</div>
+                <div className="font-medium">{deletePreview?.running_task_count || 0}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Completed tasks</div>
+                <div className="font-medium">{deletePreview?.completed_task_count || 0}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Attachments</div>
+                <div className="font-medium">{deletePreview?.attachment_count || 0}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Storage</div>
+                <div className="font-medium">{formatBytes(deletePreview?.attachment_size || 0)}</div>
+              </div>
+            </div>
+            {(deletePreview?.running_tasks || []).length > 0 && (
+              <div className="max-h-48 overflow-auto rounded-lg border border-border/60">
+                {(deletePreview?.running_tasks || []).map((task) => (
+                  <div key={task.id} className="border-b border-border/40 p-2 last:border-0">
+                    <div className="font-medium truncate">{task.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {task.priority || "P4"}{task.due_date ? ` · Due ${task.due_date}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete();
+              }}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="confirm-delete-user-btn"
+            >
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
