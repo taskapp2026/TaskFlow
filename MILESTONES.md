@@ -38,7 +38,7 @@ The codebase is already feature-rich and close to MVP completeness, but it still
 - No confirmed shared `.env` files or `.env.example` files are included.
 - Frontend requires `REACT_APP_BACKEND_URL`; if this is missing or wrong, API communication fails.
 - Backend depends on environment variables for MongoDB, JWT, and runtime configuration.
-- File upload depends on an external object storage key (`EMERGENT_LLM_KEY`); without it, attachment functionality will fail.
+- File upload depends on Cloudflare R2 configuration; without it, attachment functionality will fail.
 - Authentication cookies are not yet production-safe because cookie security settings are currently development-oriented.
 - CORS configuration is not production-safe as currently written.
 - Refresh token issuance exists, but refresh-token renewal flow is not implemented.
@@ -374,14 +374,20 @@ ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=<temporary-admin-password>
 CORS_ORIGINS=http://localhost:3000
 APP_NAME=taskflow
-EMERGENT_LLM_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ENDPOINT=
+R2_REGION=auto
+MAX_ATTACHMENT_SIZE_BYTES=104857600
 ```
 
 Notes:
 
 - `MONGO_URL`, `DB_NAME`, and `JWT_SECRET` are required by the backend
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD` control the seeded admin account
-- `EMERGENT_LLM_KEY` is only needed if attachment upload/download is expected in local testing
+- R2 variables are required if attachment upload/download is expected in local testing
 
 ### Step 5: Create Frontend Environment File
 

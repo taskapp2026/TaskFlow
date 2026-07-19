@@ -9,12 +9,15 @@ import uuid
 import json
 import logging
 import asyncio
-import requests
+import mimetypes
 from datetime import datetime, timezone, timedelta
+from urllib.parse import quote
 from typing import Optional, List, Dict, Any
 
 import bcrypt
+import boto3
 import jwt
+from botocore.exceptions import BotoCoreError, ClientError
 from bson import ObjectId
 from fastapi import (
     FastAPI,
@@ -44,8 +47,29 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 60 * 12  # 12 hours (dev friendly)
 REFRESH_TOKEN_DAYS = 7
 APP_NAME = os.environ.get("APP_NAME", "taskflow")
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "")
+R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
+R2_REGION = os.environ.get("R2_REGION", "auto")
+MAX_ATTACHMENT_SIZE_BYTES = int(
+    os.environ.get("MAX_ATTACHMENT_SIZE_BYTES", str(100 * 1024 * 1024))
+)
+ALLOWED_ATTACHMENT_MIME_PREFIXES = ("image/", "video/")
+ALLOWED_ATTACHMENT_MIME_TYPES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/plain",
+    "text/csv",
+    "application/rtf",
+    "application/zip",
+}
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -82,56 +106,99 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("taskflow")
 
 # =========================================================
-# Object Storage
+# Cloudflare R2 Object Storage
 # =========================================================
-storage_key: Optional[str] = None
+r2_client = None
 
 
-def init_storage() -> Optional[str]:
-    global storage_key
-    if storage_key:
-        return storage_key
-    if not EMERGENT_LLM_KEY:
+def get_r2_endpoint() -> str:
+    if R2_ENDPOINT:
+        return R2_ENDPOINT.rstrip("/")
+    if R2_ACCOUNT_ID:
+        return f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    return ""
+
+
+def init_storage():
+    global r2_client
+    if r2_client:
+        return r2_client
+    endpoint_url = get_r2_endpoint()
+    if not all([R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, endpoint_url]):
         return None
     try:
-        resp = requests.post(
-            f"{STORAGE_URL}/init",
-            json={"emergent_key": EMERGENT_LLM_KEY},
-            timeout=30,
+        r2_client = boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            region_name=R2_REGION,
         )
-        resp.raise_for_status()
-        storage_key = resp.json()["storage_key"]
-        return storage_key
+        return r2_client
     except Exception as e:
-        logger.error(f"Storage init failed: {e}")
+        logger.error(f"R2 storage init failed: {e}")
         return None
 
 
-def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    if not key:
+def put_object(object_key: str, data: bytes, content_type: str) -> dict:
+    client_obj = init_storage()
+    if not client_obj:
         raise HTTPException(status_code=500, detail="Storage not configured")
-    resp = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data,
-        timeout=120,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        client_obj.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=object_key,
+            Body=data,
+            ContentType=content_type,
+        )
+    except (BotoCoreError, ClientError) as e:
+        logger.error(f"R2 upload failed for {object_key}: {e}")
+        raise HTTPException(status_code=502, detail="Attachment upload failed")
+    return {"path": object_key, "size": len(data)}
 
 
-def get_object(path: str) -> tuple[bytes, str]:
-    key = init_storage()
-    if not key:
+def get_object(object_key: str) -> tuple[bytes, str]:
+    client_obj = init_storage()
+    if not client_obj:
         raise HTTPException(status_code=500, detail="Storage not configured")
-    resp = requests.get(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key},
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    try:
+        resp = client_obj.get_object(Bucket=R2_BUCKET_NAME, Key=object_key)
+        return resp["Body"].read(), resp.get("ContentType", "application/octet-stream")
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+            raise HTTPException(status_code=404, detail="Attachment object not found")
+        logger.error(f"R2 download failed for {object_key}: {e}")
+        raise HTTPException(status_code=502, detail="Attachment download failed")
+    except BotoCoreError as e:
+        logger.error(f"R2 download failed for {object_key}: {e}")
+        raise HTTPException(status_code=502, detail="Attachment download failed")
+
+
+def validate_attachment_upload(filename: str, content_type: str, data: bytes):
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    if not data:
+        raise HTTPException(status_code=400, detail="Attachment file is empty")
+    if len(data) > MAX_ATTACHMENT_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Attachment exceeds {MAX_ATTACHMENT_SIZE_BYTES} bytes",
+        )
+    guessed_type = mimetypes.guess_type(filename)[0]
+    normalized_type = (content_type or guessed_type or "application/octet-stream").lower()
+    if normalized_type == "application/octet-stream" and guessed_type:
+        normalized_type = guessed_type.lower()
+    if normalized_type in ALLOWED_ATTACHMENT_MIME_TYPES:
+        return normalized_type
+    if any(normalized_type.startswith(prefix) for prefix in ALLOWED_ATTACHMENT_MIME_PREFIXES):
+        return normalized_type
+    raise HTTPException(status_code=415, detail="Attachment type is not allowed")
+
+
+def build_attachment_object_key(task_id: str, filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return f"{APP_NAME}/tasks/{task_id}/{timestamp}-{uuid.uuid4().hex}.{ext}"
 
 
 # =========================================================
@@ -847,15 +914,16 @@ async def upload_attachment(task_id: str, request: Request, file: UploadFile = F
         raise HTTPException(404, "Task not found")
     if user.get("role") != "admin" and t["assignee_id"] != str(user["_id"]):
         raise HTTPException(403, "Forbidden")
-    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "bin"
-    path = f"{APP_NAME}/tasks/{task_id}/{uuid.uuid4()}.{ext}"
+    filename = file.filename or ""
     data = await file.read()
-    result = put_object(path, data, file.content_type or "application/octet-stream")
+    content_type = validate_attachment_upload(filename, file.content_type or "", data)
+    object_key = build_attachment_object_key(task_id, filename)
+    result = put_object(object_key, data, content_type)
     doc = {
         "task_id": task_id,
         "storage_path": result["path"],
-        "original_filename": file.filename,
-        "content_type": file.content_type or "application/octet-stream",
+        "original_filename": filename,
+        "content_type": content_type,
         "size": result.get("size", len(data)),
         "uploaded_by": str(user["_id"]),
         "uploaded_by_name": user.get("name", ""),
@@ -864,7 +932,7 @@ async def upload_attachment(task_id: str, request: Request, file: UploadFile = F
     }
     r = await db.attachments.insert_one(doc)
     doc["_id"] = r.inserted_id
-    await log_activity(task_id, user, "attachment_uploaded", new_value=file.filename, request=request)
+    await log_activity(task_id, user, "attachment_uploaded", new_value=filename, request=request)
     actor_id = str(user["_id"])
     if user.get("role") == "admin" and t["assignee_id"] != actor_id:
         await notify(t["assignee_id"], task_id, f"Admin uploaded a file to '{t['name']}'", "upload")
@@ -899,8 +967,10 @@ async def download_attachment(attachment_id: str, auth: Optional[str] = Query(No
     if user.get("role") != "admin" and t["assignee_id"] != str(user["_id"]):
         raise HTTPException(403, "Forbidden")
     data, ctype = get_object(a["storage_path"])
+    filename = a.get("original_filename", "attachment")
+    disposition = f"inline; filename*=UTF-8''{quote(filename)}"
     return Response(content=data, media_type=a.get("content_type") or ctype,
-                    headers={"Content-Disposition": f'inline; filename="{a["original_filename"]}"'})
+                    headers={"Content-Disposition": disposition})
 
 
 @api.delete("/attachments/{attachment_id}")
