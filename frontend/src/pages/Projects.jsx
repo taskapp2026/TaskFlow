@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,8 +22,6 @@ const priorities = [
 ];
 
 export default function Projects() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -208,7 +205,7 @@ export default function Projects() {
   const detailUsers = detail?.users || [];
   const tasks = detail?.tasks || [];
   const completed = tasks.filter((t) => t.completed).length;
-  const canManageSelected = selectedProject && (isAdmin || selectedProject.created_by === user?.id);
+  const canManageSelected = !!selectedProject;
 
   return (
     <div className="max-w-6xl mx-auto w-full pt-6 pb-24 md:pt-8">

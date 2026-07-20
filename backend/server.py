@@ -800,27 +800,17 @@ async def delete_label(label_id: str, user=Depends(get_current_user)):
 # Projects
 # =========================================================
 async def get_visible_project_ids_for_staff(user_id: str) -> List[str]:
-    created_or_participant = await db.projects.find(
-        {"$or": [{"created_by": user_id}, {"participant_ids": user_id}]},
-        {"_id": 1},
-    ).to_list(5000)
-    project_ids = {str(p["_id"]) for p in created_or_participant}
     task_project_ids = await db.tasks.distinct("project_id", {
         "assignee_id": user_id,
         "project_id": {"$nin": [None, ""]},
     })
-    for project_id in task_project_ids:
-        if project_id:
-            project_ids.add(project_id)
-    return list(project_ids)
+    return [project_id for project_id in task_project_ids if project_id]
 
 
 async def can_view_project(user: dict, project: dict) -> bool:
     if user.get("role") == "admin":
         return True
     uid = str(user["_id"])
-    if project.get("created_by") == uid or uid in project.get("participant_ids", []):
-        return True
     return await db.tasks.count_documents({
         "project_id": str(project["_id"]),
         "assignee_id": uid,
@@ -967,9 +957,6 @@ async def get_project(project_id: str, user=Depends(get_current_user)):
 @api.patch("/projects/{project_id}")
 async def update_project(project_id: str, body: ProjectUpdateIn, user=Depends(get_current_user)):
     project = await require_visible_project(project_id, user)
-    uid = str(user["_id"])
-    if user.get("role") != "admin" and project.get("created_by") != uid:
-        raise HTTPException(403, "Forbidden")
     update: Dict[str, Any] = {}
     for field in ["name", "description", "priority", "due_date", "status"]:
         if field in body.model_fields_set:
@@ -993,10 +980,7 @@ async def update_project(project_id: str, body: ProjectUpdateIn, user=Depends(ge
 
 @api.post("/projects/{project_id}/complete")
 async def complete_project(project_id: str, user=Depends(get_current_user)):
-    project = await require_visible_project(project_id, user)
-    uid = str(user["_id"])
-    if user.get("role") != "admin" and project.get("created_by") != uid:
-        raise HTTPException(403, "Forbidden")
+    await require_visible_project(project_id, user)
     await ensure_project_can_close(project_id)
     await db.projects.update_one(
         {"_id": oid(project_id)},
@@ -1012,10 +996,7 @@ async def complete_project(project_id: str, user=Depends(get_current_user)):
 
 @api.delete("/projects/{project_id}")
 async def delete_project(project_id: str, user=Depends(get_current_user)):
-    project = await require_visible_project(project_id, user)
-    uid = str(user["_id"])
-    if user.get("role") != "admin" and project.get("created_by") != uid:
-        raise HTTPException(403, "Forbidden")
+    await require_visible_project(project_id, user)
     await db.tasks.update_many({"project_id": project_id}, {"$set": {"project_id": None, "updated_at": now_iso()}})
     await db.projects.delete_one({"_id": oid(project_id)})
     return {"ok": True}
