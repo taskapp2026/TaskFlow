@@ -28,21 +28,19 @@ export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [users, setUsers] = useState([]);
   const [labels, setLabels] = useState([]);
+  const [sort, setSort] = useState("updated");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("P4");
   const [status, setStatus] = useState("active");
   const [dueDate, setDueDate] = useState(null);
-  const [participantIds, setParticipantIds] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPriority, setEditPriority] = useState("P4");
   const [editStatus, setEditStatus] = useState("active");
   const [editDueDate, setEditDueDate] = useState(null);
-  const [editParticipantIds, setEditParticipantIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const runOnce = useSingleFlight();
@@ -51,6 +49,18 @@ export default function Projects() {
     () => detail?.project || projects.find((p) => p.id === selectedId),
     [detail, projects, selectedId]
   );
+
+  const sortedProjects = useMemo(() => {
+    const priorityRank = { P1: 1, P2: 2, P3: 3, P4: 4 };
+    const dateValue = (value) => (value ? new Date(value).getTime() : Number.POSITIVE_INFINITY);
+    return [...projects].sort((a, b) => {
+      if (sort === "created") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      if (sort === "due") return dateValue(a.due_date) - dateValue(b.due_date);
+      if (sort === "priority") return (priorityRank[a.priority] || 99) - (priorityRank[b.priority] || 99);
+      if (sort === "alpha") return (a.name || "").localeCompare(b.name || "");
+      return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
+    });
+  }, [projects, sort]);
 
   const loadProjects = async () => {
     setLoading(true);
@@ -65,7 +75,6 @@ export default function Projects() {
 
   useEffect(() => {
     loadProjects();
-    api.get("/users").then((r) => setUsers(r.data)).catch(() => setUsers([]));
     api.get("/labels").then((r) => setLabels(r.data)).catch(() => setLabels([]));
   }, []);
 
@@ -98,14 +107,12 @@ export default function Projects() {
           priority,
           status,
           due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
-          participant_ids: isAdmin ? participantIds : [],
         });
         setName("");
         setDescription("");
         setPriority("P4");
         setStatus("active");
         setDueDate(null);
-        setParticipantIds([]);
         toast.success("Project created");
         await loadProjects();
         setSelectedId(data.id);
@@ -117,14 +124,6 @@ export default function Projects() {
     });
   };
 
-  const toggleParticipant = (id) => {
-    setParticipantIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
-  };
-
-  const toggleEditParticipant = (id) => {
-    setEditParticipantIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
-  };
-
   const openEditProject = () => {
     if (!selectedProject) return;
     setEditName(selectedProject.name || "");
@@ -132,7 +131,6 @@ export default function Projects() {
     setEditPriority(selectedProject.priority || "P4");
     setEditStatus(selectedProject.status || "active");
     setEditDueDate(selectedProject.due_date ? new Date(selectedProject.due_date) : null);
-    setEditParticipantIds(selectedProject.participant_ids || []);
     setEditOpen(true);
   };
 
@@ -149,7 +147,6 @@ export default function Projects() {
           priority: editPriority,
           status: editStatus,
           due_date: editDueDate ? format(editDueDate, "yyyy-MM-dd") : null,
-          participant_ids: isAdmin ? editParticipantIds : undefined,
         });
         toast.success("Project updated");
         setEditOpen(false);
@@ -208,7 +205,7 @@ export default function Projects() {
     });
   };
 
-  const detailUsers = detail?.users || users;
+  const detailUsers = detail?.users || [];
   const tasks = detail?.tasks || [];
   const completed = tasks.filter((t) => t.completed).length;
   const canManageSelected = selectedProject && (isAdmin || selectedProject.created_by === user?.id);
@@ -251,26 +248,6 @@ export default function Projects() {
           </Popover>
         </div>
         <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" rows={3} data-testid="project-description-input" />
-        {isAdmin && users.length > 0 && (
-          <div>
-            <div className="overline mb-1.5">Participants</div>
-            <div className="flex flex-wrap gap-1.5">
-              {users.map((u) => {
-                const on = participantIds.includes(u.id);
-                return (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => toggleParticipant(u.id)}
-                    className={cn("min-h-8 rounded-full border px-2.5 py-1 text-xs transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}
-                  >
-                    {u.name} · {u.role}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
         <div className="flex justify-end">
           <Button type="submit" disabled={saving} className="w-full rounded-full sm:w-auto" data-testid="project-create-btn">
             <Plus className="mr-1 h-4 w-4" /> {saving ? "Creating..." : "Create project"}
@@ -279,7 +256,22 @@ export default function Projects() {
       </form>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-[320px_1fr]">
-        <div className="rounded-lg border border-border/60 bg-card/20 overflow-hidden">
+        <div>
+          <div className="mb-2">
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger className="w-full" data-testid="project-sort-select">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="updated">Updated</SelectItem>
+                <SelectItem value="created">Created</SelectItem>
+                <SelectItem value="due">Due date</SelectItem>
+                <SelectItem value="priority">Priority</SelectItem>
+                <SelectItem value="alpha">Alphabetical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-card/20 overflow-hidden">
           {loading && <div className="p-6 text-sm text-muted-foreground">Loading projects...</div>}
           {!loading && projects.length === 0 && (
             <div className="p-8 text-center">
@@ -290,7 +282,7 @@ export default function Projects() {
               <p className="mt-1 text-sm text-muted-foreground">Create a project above to organize tasks.</p>
             </div>
           )}
-          {projects.map((project) => (
+          {sortedProjects.map((project) => (
             <button
               key={project.id}
               type="button"
@@ -312,6 +304,7 @@ export default function Projects() {
               </div>
             </button>
           ))}
+          </div>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-card/20 overflow-hidden">
@@ -426,26 +419,6 @@ export default function Projects() {
                 </Popover>
               </div>
             </div>
-            {isAdmin && users.length > 0 && (
-              <div>
-                <div className="overline mb-1.5">Participants</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {users.map((u) => {
-                    const on = editParticipantIds.includes(u.id);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleEditParticipant(u.id)}
-                        className={cn("min-h-8 rounded-full border px-2.5 py-1 text-xs transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}
-                      >
-                        {u.name} · {u.role}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
           <div className="flex flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
             <Button variant="ghost" onClick={() => setEditOpen(false)} className="w-full sm:w-auto">Cancel</Button>

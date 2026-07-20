@@ -912,7 +912,6 @@ async def create_project(body: ProjectIn, user=Depends(get_current_user)):
     if not name:
         raise HTTPException(status_code=400, detail="Project name is required")
     uid = str(user["_id"])
-    participant_ids = clean_participant_ids(body.participant_ids if user.get("role") == "admin" else [], uid)
     status = body.status or "active"
     completed = status == "completed"
     doc = {
@@ -925,7 +924,7 @@ async def create_project(body: ProjectIn, user=Depends(get_current_user)):
         "completed_at": now_iso() if completed else None,
         "created_by": uid,
         "created_by_name": user.get("name", ""),
-        "participant_ids": participant_ids,
+        "participant_ids": [uid],
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
@@ -976,8 +975,6 @@ async def update_project(project_id: str, body: ProjectUpdateIn, user=Depends(ge
         if field in body.model_fields_set:
             val = getattr(body, field)
             update[field] = val.strip() if field == "name" and isinstance(val, str) else val
-    if "participant_ids" in body.model_fields_set and user.get("role") == "admin":
-        update["participant_ids"] = clean_participant_ids(body.participant_ids or [], project.get("created_by", uid))
     if not update:
         return await serialize_project_summary(project, user)
     if not update.get("name", project.get("name")):
