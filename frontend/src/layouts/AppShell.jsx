@@ -33,7 +33,7 @@ export default function AppShell() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="font-display text-base font-bold tracking-tight">TaskFlow</div>
+          <div className="font-display text-base font-bold tracking-tight">Task Soni Power</div>
           <div className="flex items-center gap-1">
             <NotificationsBell />
             <button

@@ -6,6 +6,7 @@ import Login from "@/pages/Login";
 import AppShell from "@/layouts/AppShell";
 import { AllTasks, Today, Upcoming, Completed } from "@/pages/TaskPages";
 import Labels from "@/pages/Labels";
+import Projects from "@/pages/Projects";
 import Dashboard from "@/pages/Dashboard";
 import StaffManagement from "@/pages/StaffManagement";
 import UserTasks from "@/pages/UserTasks";
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Route path="upcoming" element={<Upcoming />} />
         <Route path="completed" element={<Completed />} />
         <Route path="labels" element={<Labels />} />
+        <Route path="projects" element={<Projects />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="staff" element={<Guarded adminOnly><StaffManagement /></Guarded>} />
         <Route path="user-tasks" element={<Guarded adminOnly><UserTasks /></Guarded>} />

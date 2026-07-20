@@ -51,7 +51,7 @@ export default function Login() {
               <Zap className="w-5 h-5 text-primary" strokeWidth={2.5} />
             </div>
             <div>
-              <div className="font-display text-lg font-bold tracking-tight">TaskFlow</div>
+              <div className="font-display text-lg font-bold tracking-tight">Task Soni Power</div>
               <div className="overline">Enterprise Task Management</div>
             </div>
           </div>
@@ -74,7 +74,7 @@ export default function Login() {
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 grid place-items-center">
               <Zap className="w-4 h-4 text-primary" />
             </div>
-            <div className="font-display text-lg font-bold tracking-tight">TaskFlow</div>
+            <div className="font-display text-lg font-bold tracking-tight">Task Soni Power</div>
           </div>
           <div className="overline mb-2">Sign in</div>
           <h1 className="font-display text-4xl font-bold tracking-tight leading-none">Welcome back.</h1>

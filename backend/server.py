@@ -339,6 +339,24 @@ class LabelIn(BaseModel):
     description: Optional[str] = None
 
 
+class ProjectIn(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    priority: str = "P4"
+    due_date: Optional[str] = None
+    status: str = "active"
+    participant_ids: List[str] = Field(default_factory=list)
+
+
+class ProjectUpdateIn(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    due_date: Optional[str] = None
+    status: Optional[str] = None
+    participant_ids: Optional[List[str]] = None
+
+
 class SubtaskIn(BaseModel):
     title: str
     priority: str = "P4"
@@ -358,6 +376,7 @@ class TaskIn(BaseModel):
     name: str
     description: Optional[str] = ""
     assignee_id: Optional[str] = None
+    project_id: Optional[str] = None
     priority: str = "P4"
     label_ids: List[str] = []
     due_date: Optional[str] = None  # YYYY-MM-DD
@@ -369,6 +388,7 @@ class TaskUpdateIn(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     assignee_id: Optional[str] = None
+    project_id: Optional[str] = None
     priority: Optional[str] = None
     label_ids: Optional[List[str]] = None
     due_date: Optional[str] = None
@@ -414,6 +434,17 @@ def serialize(doc: dict) -> dict:
         if isinstance(v, ObjectId):
             doc[k] = str(v)
     return doc
+
+
+def clean_participant_ids(ids: Optional[List[str]], creator_id: str) -> List[str]:
+    cleaned = []
+    for user_id in ids or []:
+        if user_id and user_id not in cleaned:
+            oid(user_id)
+            cleaned.append(user_id)
+    if creator_id not in cleaned:
+        cleaned.append(creator_id)
+    return cleaned
 
 
 async def log_activity(task_id: str, user: dict, action: str, field: Optional[str] = None,
@@ -766,6 +797,190 @@ async def delete_label(label_id: str, user=Depends(get_current_user)):
 
 
 # =========================================================
+# Projects
+# =========================================================
+async def get_visible_project_ids_for_staff(user_id: str) -> List[str]:
+    created_or_participant = await db.projects.find(
+        {"$or": [{"created_by": user_id}, {"participant_ids": user_id}]},
+        {"_id": 1},
+    ).to_list(5000)
+    project_ids = {str(p["_id"]) for p in created_or_participant}
+    task_project_ids = await db.tasks.distinct("project_id", {
+        "assignee_id": user_id,
+        "project_id": {"$nin": [None, ""]},
+    })
+    for project_id in task_project_ids:
+        if project_id:
+            project_ids.add(project_id)
+    return list(project_ids)
+
+
+async def can_view_project(user: dict, project: dict) -> bool:
+    if user.get("role") == "admin":
+        return True
+    uid = str(user["_id"])
+    if project.get("created_by") == uid or uid in project.get("participant_ids", []):
+        return True
+    return await db.tasks.count_documents({
+        "project_id": str(project["_id"]),
+        "assignee_id": uid,
+    }) > 0
+
+
+async def require_visible_project(project_id: str, user: dict) -> dict:
+    project = await db.projects.find_one({"_id": oid(project_id)})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if not await can_view_project(user, project):
+        raise HTTPException(403, "Forbidden")
+    return project
+
+
+async def validate_project_for_task(project_id: Optional[str], user: dict) -> Optional[str]:
+    if not project_id:
+        return None
+    project = await require_visible_project(project_id, user)
+    return str(project["_id"])
+
+
+async def serialize_project_summary(project: dict, user: dict, counts: Optional[dict] = None) -> dict:
+    data = serialize(project)
+    project_id = data["id"]
+    if counts is None:
+        task_query = {"project_id": project_id}
+        if user.get("role") != "admin":
+            task_query["assignee_id"] = str(user["_id"])
+        counts = {
+            "task_count": await db.tasks.count_documents(task_query),
+            "completed_task_count": await db.tasks.count_documents({**task_query, "completed": True}),
+        }
+    data["visible_task_count"] = counts.get("task_count", 0)
+    data["visible_completed_task_count"] = counts.get("completed_task_count", 0)
+    return data
+
+
+@api.get("/projects")
+async def list_projects(user=Depends(get_current_user)):
+    if user.get("role") == "admin":
+        q = {}
+    else:
+        visible_ids = await get_visible_project_ids_for_staff(str(user["_id"]))
+        object_ids = []
+        for project_id in visible_ids:
+            try:
+                object_ids.append(ObjectId(project_id))
+            except Exception:
+                continue
+        q = {"_id": {"$in": object_ids}} if object_ids else {"_id": {"$in": []}}
+
+    docs = await db.projects.find(q).sort("updated_at", -1).to_list(1000)
+    project_ids = [str(p["_id"]) for p in docs]
+    task_match: Dict[str, Any] = {"project_id": {"$in": project_ids}}
+    if user.get("role") != "admin":
+        task_match["assignee_id"] = str(user["_id"])
+    counts = {}
+    if project_ids:
+        pipeline = [
+            {"$match": task_match},
+            {"$group": {
+                "_id": "$project_id",
+                "task_count": {"$sum": 1},
+                "completed_task_count": {"$sum": {"$cond": [{"$eq": ["$completed", True]}, 1, 0]}},
+            }},
+        ]
+        counts = {c["_id"]: c for c in await db.tasks.aggregate(pipeline).to_list(1000)}
+    return [await serialize_project_summary(p, user, counts.get(str(p["_id"]), {})) for p in docs]
+
+
+@api.post("/projects")
+async def create_project(body: ProjectIn, user=Depends(get_current_user)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Project name is required")
+    uid = str(user["_id"])
+    participant_ids = clean_participant_ids(body.participant_ids if user.get("role") == "admin" else [], uid)
+    doc = {
+        "name": name,
+        "description": body.description or "",
+        "priority": body.priority or "P4",
+        "due_date": body.due_date,
+        "status": body.status or "active",
+        "created_by": uid,
+        "created_by_name": user.get("name", ""),
+        "participant_ids": participant_ids,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    r = await db.projects.insert_one(doc)
+    doc["_id"] = r.inserted_id
+    return await serialize_project_summary(doc, user)
+
+
+@api.get("/projects/{project_id}")
+async def get_project(project_id: str, user=Depends(get_current_user)):
+    project = await require_visible_project(project_id, user)
+    task_query = build_task_query(user, {"project_id": str(project["_id"])})
+    tasks = await db.tasks.find(task_query).sort("created_at", -1).to_list(2000)
+    user_ids = set(project.get("participant_ids", []))
+    user_ids.add(project.get("created_by"))
+    for task in tasks:
+        if task.get("assignee_id"):
+            user_ids.add(task["assignee_id"])
+        if task.get("created_by"):
+            user_ids.add(task["created_by"])
+    if user.get("role") != "admin":
+        user_ids = {str(user["_id"])}
+    object_ids = []
+    for user_id in user_ids:
+        try:
+            object_ids.append(ObjectId(user_id))
+        except Exception:
+            continue
+    users = await db.users.find({"_id": {"$in": object_ids}}).to_list(1000) if object_ids else []
+    return {
+        "project": await serialize_project_summary(project, user, {
+            "task_count": len(tasks),
+            "completed_task_count": len([t for t in tasks if t.get("completed")]),
+        }),
+        "tasks": [serialize(t) for t in tasks],
+        "users": [user_public(u) for u in users],
+    }
+
+
+@api.patch("/projects/{project_id}")
+async def update_project(project_id: str, body: ProjectUpdateIn, user=Depends(get_current_user)):
+    project = await require_visible_project(project_id, user)
+    uid = str(user["_id"])
+    if user.get("role") != "admin" and project.get("created_by") != uid:
+        raise HTTPException(403, "Forbidden")
+    update: Dict[str, Any] = {}
+    for field in ["name", "description", "priority", "due_date", "status"]:
+        if field in body.model_fields_set:
+            val = getattr(body, field)
+            update[field] = val.strip() if field == "name" and isinstance(val, str) else val
+    if "participant_ids" in body.model_fields_set and user.get("role") == "admin":
+        update["participant_ids"] = clean_participant_ids(body.participant_ids or [], project.get("created_by", uid))
+    if not update:
+        return await serialize_project_summary(project, user)
+    if not update.get("name", project.get("name")):
+        raise HTTPException(status_code=400, detail="Project name is required")
+    update["updated_at"] = now_iso()
+    await db.projects.update_one({"_id": oid(project_id)}, {"$set": update})
+    return await serialize_project_summary(await db.projects.find_one({"_id": oid(project_id)}), user)
+
+
+@api.delete("/projects/{project_id}")
+async def delete_project(project_id: str, user=Depends(get_current_user)):
+    project = await require_visible_project(project_id, user)
+    uid = str(user["_id"])
+    if user.get("role") != "admin" and project.get("created_by") != uid:
+        raise HTTPException(403, "Forbidden")
+    await db.tasks.update_many({"project_id": project_id}, {"$set": {"project_id": None, "updated_at": now_iso()}})
+    await db.projects.delete_one({"_id": oid(project_id)})
+    return {"ok": True}
+
+
+# =========================================================
 # Tasks
 # =========================================================
 def build_task_query(user: dict, params: dict) -> dict:
@@ -781,6 +996,8 @@ def build_task_query(user: dict, params: dict) -> dict:
         q["priority"] = params["priority"]
     if params.get("label_id"):
         q["label_ids"] = params["label_id"]
+    if params.get("project_id"):
+        q["project_id"] = params["project_id"]
     if params.get("status") == "completed":
         q["completed"] = True
     elif params.get("status") == "pending":
@@ -814,6 +1031,7 @@ async def list_tasks(
     scope: Optional[str] = None,
     priority: Optional[str] = None,
     label_id: Optional[str] = None,
+    project_id: Optional[str] = None,
     assignee_id: Optional[str] = None,
     created_by: Optional[str] = None,
     status: Optional[str] = None,
@@ -821,8 +1039,10 @@ async def list_tasks(
     sort: Optional[str] = "created",
     user=Depends(get_current_user),
 ):
+    if project_id:
+        await require_visible_project(project_id, user)
     params = dict(scope=scope, priority=priority, label_id=label_id,
-                  assignee_id=assignee_id, created_by=created_by, status=status, search=search)
+                  project_id=project_id, assignee_id=assignee_id, created_by=created_by, status=status, search=search)
     q = build_task_query(user, params)
     sort_map = {
         "created": ("created_at", -1),
@@ -851,11 +1071,13 @@ async def create_task(body: TaskIn, request: Request, user=Depends(get_current_u
     assignee_id = body.assignee_id or str(user["_id"])
     if user.get("role") != "admin":
         assignee_id = str(user["_id"])
+    project_id = await validate_project_for_task(body.project_id, user)
     doc = {
         "name": body.name,
         "description": body.description or "",
         "assignee_id": assignee_id,
         "created_by": str(user["_id"]),
+        "project_id": project_id,
         "priority": body.priority or "P4",
         "label_ids": body.label_ids or [],
         "due_date": body.due_date,
@@ -870,6 +1092,8 @@ async def create_task(body: TaskIn, request: Request, user=Depends(get_current_u
     r = await db.tasks.insert_one(doc)
     doc["_id"] = r.inserted_id
     tid = str(r.inserted_id)
+    if project_id:
+        await db.projects.update_one({"_id": oid(project_id)}, {"$set": {"updated_at": now_iso()}})
     await log_activity(tid, user, "task_created", new_value=body.name, request=request)
     # Notifications
     if user.get("role") == "admin" and assignee_id != str(user["_id"]):
@@ -896,6 +1120,11 @@ async def update_task(task_id: str, body: TaskUpdateIn, request: Request, user=D
             if t.get(field) != val:
                 tracked[field] = (t.get(field), val)
                 update[field] = val
+    if "project_id" in body.model_fields_set:
+        project_id = await validate_project_for_task(body.project_id, user)
+        if t.get("project_id") != project_id:
+            tracked["project_id"] = (t.get("project_id"), project_id)
+            update["project_id"] = project_id
     if body.completed is not None and body.completed != t.get("completed", False):
         update["completed"] = body.completed
         update["completed_at"] = now_iso() if body.completed else None
@@ -904,6 +1133,13 @@ async def update_task(task_id: str, body: TaskUpdateIn, request: Request, user=D
         return serialize(t)
     update["updated_at"] = now_iso()
     await db.tasks.update_one({"_id": oid(task_id)}, {"$set": update})
+    if "project_id" in tracked:
+        project_ids = [pid for pid in tracked["project_id"] if pid]
+        for project_id in project_ids:
+            try:
+                await db.projects.update_one({"_id": ObjectId(project_id)}, {"$set": {"updated_at": now_iso()}})
+            except Exception:
+                continue
     for field, (old, new) in tracked.items():
         action = "task_completed" if field == "completed" and new else (
                  "task_reopened" if field == "completed" and not new else f"{field}_changed")
@@ -1366,6 +1602,12 @@ async def mark_all_read(user=Depends(get_current_user)):
     return {"ok": True}
 
 
+@api.delete("/notifications")
+async def clear_notifications(user=Depends(get_current_user)):
+    await db.notifications.delete_many({"user_id": str(user["_id"])})
+    return {"ok": True}
+
+
 # ---------------------------------------------------------
 # Dashboards
 # ---------------------------------------------------------
@@ -1473,7 +1715,10 @@ async def startup():
     try:
         await db.users.create_index("email", unique=True)
         await db.tasks.create_index([("assignee_id", 1), ("completed", 1)])
+        await db.tasks.create_index([("project_id", 1), ("assignee_id", 1), ("completed", 1)])
         await db.tasks.create_index("due_date")
+        await db.projects.create_index([("created_by", 1), ("updated_at", -1)])
+        await db.projects.create_index([("participant_ids", 1), ("updated_at", -1)])
         await db.activities.create_index([("task_id", 1), ("created_at", -1)])
         await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     except Exception as e:

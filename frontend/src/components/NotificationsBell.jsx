@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Check } from "lucide-react";
+import { Bell, Check, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -32,6 +32,13 @@ export default function NotificationsBell() {
     });
   };
 
+  const clearAll = async () => {
+    await runOnce("notifications-clear-all", async () => {
+      await api.delete("/notifications");
+      setItems([]);
+    });
+  };
+
   const clickItem = async (n) => {
     await runOnce(`notification-click-${n.id}`, async () => {
       if (!n.read) await api.post(`/notifications/${n.id}/read`);
@@ -61,14 +68,19 @@ export default function NotificationsBell() {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[calc(100vw-1.5rem)] max-w-[380px] p-0 bg-popover" data-testid="notifications-panel">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b">
           <div>
             <div className="font-display font-bold text-base">Notifications</div>
             <div className="overline">{unread} unread</div>
           </div>
-          <button onClick={markAll} data-testid="mark-all-read" className="text-xs text-primary hover:underline flex items-center gap-1">
-            <Check className="w-3 h-3" /> Mark all read
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button onClick={markAll} data-testid="mark-all-read" className="text-xs text-primary hover:underline flex items-center gap-1">
+              <Check className="w-3 h-3" /> Mark all as read
+            </button>
+            <button onClick={clearAll} data-testid="clear-notifications" className="text-xs text-destructive hover:underline flex items-center gap-1">
+              <Trash2 className="w-3 h-3" /> Clear Notifications
+            </button>
+          </div>
         </div>
         <ScrollArea className="max-h-[min(420px,70dvh)]">
           {items.length === 0 ? (

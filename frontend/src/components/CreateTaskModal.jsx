@@ -6,7 +6,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useEffect, useState } from "react";
-import { CalendarIcon, Clock, Tag as TagIcon, X } from "lucide-react";
+import { CalendarIcon, Clock, FolderKanban, Tag as TagIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -38,6 +38,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [projectId, setProjectId] = useState("none");
   const [priority, setPriority] = useState("P4");
   const [labelIds, setLabelIds] = useState([]);
   const [dueDate, setDueDate] = useState(null);
@@ -45,20 +46,23 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
   const [reminder, setReminder] = useState("none");
   const [users, setUsers] = useState([]);
   const [labels, setLabels] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [saving, setSaving] = useState(false);
   const runOnce = useSingleFlight();
 
   useEffect(() => {
     if (!open) return;
     (async () => {
-      const [u, l] = await Promise.allSettled([api.get("/users"), api.get("/labels")]);
+      const [u, l, p] = await Promise.allSettled([api.get("/users"), api.get("/labels"), api.get("/projects")]);
       if (u.status === "fulfilled") setUsers(u.value.data);
       if (l.status === "fulfilled") setLabels(l.value.data);
+      if (p.status === "fulfilled") setProjects(p.value.data);
     })();
     if (initial) {
       setName(initial.name || "");
       setDescription(initial.description || "");
       setAssigneeId(initial.assignee_id || "");
+      setProjectId(initial.project_id || "none");
       setPriority(initial.priority || "P4");
       setLabelIds(initial.label_ids || []);
       setDueDate(initial.due_date ? new Date(initial.due_date) : null);
@@ -66,7 +70,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
       setReminder(initial.reminder?.preset || "none");
     } else {
       setName(""); setDescription(""); setAssigneeId(""); setPriority("P4");
-      setLabelIds([]); setDueDate(null); setDueTime(""); setReminder("none");
+      setProjectId("none"); setLabelIds([]); setDueDate(null); setDueTime(""); setReminder("none");
     }
   }, [open, initial]);
 
@@ -79,6 +83,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
           name: name.trim(),
           description,
           assignee_id: isAdmin ? (assigneeId || null) : null,
+          project_id: projectId === "none" ? null : projectId,
           priority,
           label_ids: labelIds,
           due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
@@ -161,6 +166,22 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
                 <SelectContent>
                   {priorities.map((p) => (
                     <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <div className="overline mb-1.5 flex items-center gap-1"><FolderKanban className="w-3 h-3" /> Project</div>
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger data-testid="task-project-select">
+                  <SelectValue placeholder="Choose project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No project</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

@@ -5,10 +5,10 @@ import {
   CalendarClock,
   CheckCircle2,
   Tag,
+  FolderKanban,
   LayoutDashboard,
   Users,
   ShieldCheck,
-  Bell,
   Settings as SettingsIcon,
   UserCircle,
   Zap,
@@ -21,19 +21,19 @@ import { useTheme } from "@/context/ThemeContext";
 import { cn } from "@/lib/utils";
 
 const staffNav = [
+  { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "nav-dashboard" },
   { to: "/app/all", label: "All Tasks", icon: Inbox, testId: "nav-all" },
   { to: "/app/today", label: "Today", icon: Calendar, testId: "nav-today" },
   { to: "/app/upcoming", label: "Upcoming", icon: CalendarClock, testId: "nav-upcoming" },
   { to: "/app/completed", label: "Completed", icon: CheckCircle2, testId: "nav-completed" },
   { to: "/app/labels", label: "Labels", icon: Tag, testId: "nav-labels" },
-  { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "nav-dashboard" },
+  { to: "/app/projects", label: "Projects", icon: FolderKanban, testId: "nav-projects" },
 ];
 
 const adminNav = [
-  { to: "/app/staff", label: "Staff Management", icon: Users, testId: "nav-staff" },
   { to: "/app/user-tasks", label: "User-wise Tasks", icon: Users, testId: "nav-user-tasks" },
   { to: "/app/audit", label: "Audit Logs", icon: ShieldCheck, testId: "nav-audit" },
-  { to: "/app/notifications", label: "Notifications", icon: Bell, testId: "nav-notifications" },
+  { to: "/app/staff", label: "Staff Management", icon: Users, testId: "nav-staff" },
 ];
 
 const bottomNav = [
@@ -53,7 +53,7 @@ export default function Sidebar({ className, onNavigate }) {
           <Zap className="w-4 h-4 text-primary" strokeWidth={2.5} />
         </div>
         <div>
-          <div className="font-display text-[15px] font-bold tracking-tight leading-none">TaskFlow</div>
+          <div className="font-display text-[15px] font-bold tracking-tight leading-none">Task Soni Power</div>
           <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Enterprise</div>
         </div>
       </div>
