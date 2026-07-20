@@ -840,7 +840,21 @@ async def validate_project_for_task(project_id: Optional[str], user: dict) -> Op
     if not project_id:
         return None
     project = await require_visible_project(project_id, user)
+    if project.get("completed") or project.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Cannot assign tasks to a completed project")
     return str(project["_id"])
+
+
+async def ensure_project_can_close(project_id: str):
+    incomplete_count = await db.tasks.count_documents({
+        "project_id": project_id,
+        "completed": {"$ne": True},
+    })
+    if incomplete_count:
+        raise HTTPException(
+            status_code=400,
+            detail="Project cannot be completed until all tasks inside it are completed",
+        )
 
 
 async def serialize_project_summary(project: dict, user: dict, counts: Optional[dict] = None) -> dict:
@@ -899,12 +913,16 @@ async def create_project(body: ProjectIn, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Project name is required")
     uid = str(user["_id"])
     participant_ids = clean_participant_ids(body.participant_ids if user.get("role") == "admin" else [], uid)
+    status = body.status or "active"
+    completed = status == "completed"
     doc = {
         "name": name,
         "description": body.description or "",
         "priority": body.priority or "P4",
         "due_date": body.due_date,
-        "status": body.status or "active",
+        "status": status,
+        "completed": completed,
+        "completed_at": now_iso() if completed else None,
         "created_by": uid,
         "created_by_name": user.get("name", ""),
         "participant_ids": participant_ids,
@@ -964,8 +982,34 @@ async def update_project(project_id: str, body: ProjectUpdateIn, user=Depends(ge
         return await serialize_project_summary(project, user)
     if not update.get("name", project.get("name")):
         raise HTTPException(status_code=400, detail="Project name is required")
+    if update.get("status") == "completed" and not project.get("completed"):
+        await ensure_project_can_close(project_id)
+        update["completed"] = True
+        update["completed_at"] = now_iso()
+    elif update.get("status") and update.get("status") != "completed":
+        update["completed"] = False
+        update["completed_at"] = None
     update["updated_at"] = now_iso()
     await db.projects.update_one({"_id": oid(project_id)}, {"$set": update})
+    return await serialize_project_summary(await db.projects.find_one({"_id": oid(project_id)}), user)
+
+
+@api.post("/projects/{project_id}/complete")
+async def complete_project(project_id: str, user=Depends(get_current_user)):
+    project = await require_visible_project(project_id, user)
+    uid = str(user["_id"])
+    if user.get("role") != "admin" and project.get("created_by") != uid:
+        raise HTTPException(403, "Forbidden")
+    await ensure_project_can_close(project_id)
+    await db.projects.update_one(
+        {"_id": oid(project_id)},
+        {"$set": {
+            "status": "completed",
+            "completed": True,
+            "completed_at": now_iso(),
+            "updated_at": now_iso(),
+        }},
+    )
     return await serialize_project_summary(await db.projects.find_one({"_id": oid(project_id)}), user)
 
 

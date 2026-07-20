@@ -7,10 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import TaskRow from "@/components/TaskRow";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon, CheckCircle2, FolderKanban, Plus, ListTodo } from "lucide-react";
+import { CalendarIcon, CheckCircle2, Edit, FolderKanban, Plus, ListTodo, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import useSingleFlight from "@/hooks/useSingleFlight";
 
@@ -35,6 +36,13 @@ export default function Projects() {
   const [status, setStatus] = useState("active");
   const [dueDate, setDueDate] = useState(null);
   const [participantIds, setParticipantIds] = useState([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPriority, setEditPriority] = useState("P4");
+  const [editStatus, setEditStatus] = useState("active");
+  const [editDueDate, setEditDueDate] = useState(null);
+  const [editParticipantIds, setEditParticipantIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const runOnce = useSingleFlight();
@@ -68,6 +76,12 @@ export default function Projects() {
     }
     api.get(`/projects/${selectedId}`).then((r) => setDetail(r.data)).catch(() => setDetail(null));
   }, [selectedId]);
+
+  const refreshSelectedProject = async () => {
+    if (!selectedId) return;
+    const { data } = await api.get(`/projects/${selectedId}`);
+    setDetail(data);
+  };
 
   const createProject = async (e) => {
     e.preventDefault();
@@ -107,6 +121,75 @@ export default function Projects() {
     setParticipantIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   };
 
+  const toggleEditParticipant = (id) => {
+    setEditParticipantIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  };
+
+  const openEditProject = () => {
+    if (!selectedProject) return;
+    setEditName(selectedProject.name || "");
+    setEditDescription(selectedProject.description || "");
+    setEditPriority(selectedProject.priority || "P4");
+    setEditStatus(selectedProject.status || "active");
+    setEditDueDate(selectedProject.due_date ? new Date(selectedProject.due_date) : null);
+    setEditParticipantIds(selectedProject.participant_ids || []);
+    setEditOpen(true);
+  };
+
+  const saveProject = async () => {
+    await runOnce(`project-save-${selectedId}`, async () => {
+      if (!editName.trim()) {
+        toast.error("Project name is required");
+        return;
+      }
+      try {
+        await api.patch(`/projects/${selectedId}`, {
+          name: editName.trim(),
+          description: editDescription,
+          priority: editPriority,
+          status: editStatus,
+          due_date: editDueDate ? format(editDueDate, "yyyy-MM-dd") : null,
+          participant_ids: isAdmin ? editParticipantIds : undefined,
+        });
+        toast.success("Project updated");
+        setEditOpen(false);
+        await refreshSelectedProject();
+        loadProjects();
+      } catch (err) {
+        toast.error(err.response?.data?.detail || "Failed to update project");
+      }
+    });
+  };
+
+  const completeProject = async () => {
+    await runOnce(`project-complete-${selectedId}`, async () => {
+      try {
+        await api.post(`/projects/${selectedId}/complete`);
+        toast.success("Project completed");
+        await refreshSelectedProject();
+        loadProjects();
+      } catch (err) {
+        toast.error(err.response?.data?.detail || "Failed to complete project");
+      }
+    });
+  };
+
+  const deleteProject = async () => {
+    await runOnce(`project-delete-${selectedId}`, async () => {
+      if (!window.confirm("Delete this project? Tasks will remain and be unassigned from the project.")) return;
+      try {
+        await api.delete(`/projects/${selectedId}`);
+        toast.success("Project deleted");
+        const { data } = await api.get("/projects");
+        setProjects(data);
+        setSelectedId(data[0]?.id || null);
+        setDetail(null);
+      } catch (err) {
+        toast.error(err.response?.data?.detail || "Failed to delete project");
+      }
+    });
+  };
+
   const toggleTask = async (task) => {
     await runOnce(`project-task-toggle-${task.id}`, async () => {
       const nextTasks = (detail?.tasks || []).map((t) => (
@@ -128,6 +211,7 @@ export default function Projects() {
   const detailUsers = detail?.users || users;
   const tasks = detail?.tasks || [];
   const completed = tasks.filter((t) => t.completed).length;
+  const canManageSelected = selectedProject && (isAdmin || selectedProject.created_by === user?.id);
 
   return (
     <div className="max-w-6xl mx-auto w-full pt-6 pb-24 md:pt-8">
@@ -247,14 +331,35 @@ export default function Projects() {
                       <span>Created by {selectedProject.created_by_name || "Unknown"}</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:min-w-[180px]">
-                    <div className="rounded-lg border border-border/60 bg-card/40 p-3">
-                      <div className="overline flex items-center gap-1"><ListTodo className="h-3 w-3" /> Tasks</div>
-                      <div className="mt-1 font-display text-2xl font-bold">{tasks.length}</div>
-                    </div>
-                    <div className="rounded-lg border border-border/60 bg-card/40 p-3">
-                      <div className="overline flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Done</div>
-                      <div className="mt-1 font-display text-2xl font-bold">{completed}</div>
+                  <div className="space-y-2 sm:min-w-[220px]">
+                    {canManageSelected && (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={openEditProject} className="flex-1" data-testid="project-edit-btn">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={deleteProject} className="hover:text-destructive" data-testid="project-delete-btn">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={completeProject}
+                          disabled={selectedProject.completed}
+                          className="flex-1 rounded-full"
+                          data-testid="project-complete-btn"
+                        >
+                          {selectedProject.completed ? "Closed" : "Close"}
+                        </Button>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+                        <div className="overline flex items-center gap-1"><ListTodo className="h-3 w-3" /> Tasks</div>
+                        <div className="mt-1 font-display text-2xl font-bold">{tasks.length}</div>
+                      </div>
+                      <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+                        <div className="overline flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Done</div>
+                        <div className="mt-1 font-display text-2xl font-bold">{completed}</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -276,6 +381,78 @@ export default function Projects() {
           )}
         </div>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-[640px] p-0 gap-0 bg-popover" data-testid="project-edit-modal">
+          <DialogHeader className="px-4 py-4 border-b sm:px-6">
+            <DialogTitle className="font-display text-lg tracking-tight">Edit Project</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(100dvh-11rem)] overflow-y-auto p-4 space-y-4 sm:p-6">
+            <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Project name" data-testid="project-edit-name-input" />
+            <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Description (optional)" rows={3} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="overline mb-1.5">Priority</div>
+                <Select value={editPriority} onValueChange={setEditPriority}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {priorities.map((p) => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="overline mb-1.5">Status</div>
+                <Select value={editStatus} onValueChange={setEditStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="overline mb-1.5">Due date</div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editDueDate && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      <span className="truncate">{editDueDate ? format(editDueDate, "PPP") : "Pick a due date"}</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto max-w-[calc(100vw-2rem)] p-0 bg-popover" align="start">
+                    <Calendar mode="single" selected={editDueDate} onSelect={setEditDueDate} initialFocus />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            {isAdmin && users.length > 0 && (
+              <div>
+                <div className="overline mb-1.5">Participants</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {users.map((u) => {
+                    const on = editParticipantIds.includes(u.id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleEditParticipant(u.id)}
+                        className={cn("min-h-8 rounded-full border px-2.5 py-1 text-xs transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}
+                      >
+                        {u.name} · {u.role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+            <Button variant="ghost" onClick={() => setEditOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+            <Button onClick={saveProject} className="w-full rounded-full px-6 sm:w-auto" data-testid="project-save-btn">Save Changes</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
