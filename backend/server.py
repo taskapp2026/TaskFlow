@@ -454,12 +454,12 @@ def normalize_task_list_scope(scope: Optional[str]) -> str:
     return scope if scope in ("today", "upcoming", "overdue", "completed") else "all"
 
 
-def normalize_task_list_settings(settings: dict) -> dict:
+def normalize_task_list_settings(settings: dict, default_sort: str = "created") -> dict:
     allowed_sorts = {"created", "updated", "due", "priority", "alpha", "custom"}
     allowed_priorities = {"all", "P1", "P2", "P3", "P4"}
     allowed_statuses = {"all", "pending", "completed"}
     out = {
-        "sort": settings.get("sort") if settings.get("sort") in allowed_sorts else "created",
+        "sort": settings.get("sort") if settings.get("sort") in allowed_sorts else default_sort,
         "priority": settings.get("priority") if settings.get("priority") in allowed_priorities else "all",
         "label_id": settings.get("label_id") or "all",
         "assignee_id": settings.get("assignee_id") or "all",
@@ -675,11 +675,12 @@ async def me(user=Depends(get_current_user)):
 @api.get("/me/task-list-settings")
 async def get_task_list_settings(scope: Optional[str] = "all", user=Depends(get_current_user)):
     scope_key = normalize_task_list_scope(scope)
+    default_sort = "custom" if scope_key == "all" else "created"
     doc = await db.user_task_list_settings.find_one({
         "user_id": str(user["_id"]),
         "scope": scope_key,
     })
-    settings = normalize_task_list_settings(doc.get("settings", {}) if doc else {})
+    settings = normalize_task_list_settings(doc.get("settings", {}) if doc else {}, default_sort=default_sort)
     if scope_key != "all" and settings["sort"] == "custom":
         settings["sort"] = "created"
     return {"scope": scope_key, "settings": settings}
@@ -688,6 +689,7 @@ async def get_task_list_settings(scope: Optional[str] = "all", user=Depends(get_
 @api.patch("/me/task-list-settings")
 async def save_task_list_settings(body: TaskListSettingsIn, user=Depends(get_current_user)):
     scope_key = normalize_task_list_scope(body.scope)
+    default_sort = "custom" if scope_key == "all" else "created"
     incoming = {
         "sort": body.sort,
         "priority": body.priority,
@@ -696,7 +698,7 @@ async def save_task_list_settings(body: TaskListSettingsIn, user=Depends(get_cur
         "status": body.status,
         "search": body.search,
     }
-    settings = normalize_task_list_settings({k: v for k, v in incoming.items() if v is not None})
+    settings = normalize_task_list_settings({k: v for k, v in incoming.items() if v is not None}, default_sort=default_sort)
     if scope_key != "all" and settings["sort"] == "custom":
         settings["sort"] = "created"
     await db.user_task_list_settings.update_one(
@@ -1146,7 +1148,7 @@ async def list_tasks(
     created_by: Optional[str] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
-    sort: Optional[str] = "created",
+    sort: Optional[str] = None,
     user=Depends(get_current_user),
 ):
     if project_id:
@@ -1163,9 +1165,10 @@ async def list_tasks(
         "priority": ("priority", 1),
         "alpha": ("name", 1),
     }
-    sk, sd = sort_map.get(sort or "created", ("created_at", -1))
+    effective_sort = sort or ("custom" if not scope and not project_id else "created")
+    sk, sd = sort_map.get(effective_sort, ("created_at", -1))
     docs = await db.tasks.find(q).sort(sk, sd).to_list(2000)
-    if (sort or "created") == "custom" and not scope and not project_id:
+    if effective_sort == "custom" and not scope and not project_id:
         docs = await sort_tasks_by_custom_order(str(user["_id"]), docs)
     return [serialize(d) for d in docs]
 

@@ -20,7 +20,7 @@ export default function TaskList({ scope, title, subtitle }) {
   const [labelId, setLabelId] = useState("all");
   const [assigneeId, setAssigneeId] = useState("all");
   const [status, setStatus] = useState("all");
-  const [sort, setSort] = useState("created");
+  const [sort, setSort] = useState("custom");
   const [loading, setLoading] = useState(true);
   const [settingsReady, setSettingsReady] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
@@ -46,11 +46,11 @@ export default function TaskList({ scope, title, subtitle }) {
         setLabelId(saved.label_id || "all");
         setAssigneeId(saved.assignee_id || "all");
         setStatus(isAllTasks ? "all" : (saved.status || "all"));
-        setSort(saved.sort || "created");
+        setSort(saved.sort || (isAllTasks ? "custom" : "created"));
       } catch {
         if (!active) return;
         setStatus("all");
-        setSort((cur) => (!isAllTasks && cur === "custom" ? "created" : cur));
+        setSort((cur) => (isAllTasks ? (cur || "custom") : (cur === "custom" ? "created" : cur || "created")));
       } finally {
         if (active) setSettingsReady(true);
       }
@@ -210,11 +210,17 @@ export default function TaskList({ scope, title, subtitle }) {
             </SelectContent>
           </Select>
         )}
-        <Select value={isCustomSort ? "created" : sort} onValueChange={setSort}>
+        <Select
+          value={isCustomSort ? "manual" : sort}
+          onValueChange={(value) => {
+            if (value !== "manual") setSort(value);
+          }}
+        >
           <SelectTrigger className="w-full sm:w-[150px]" data-testid="filter-sort">
             <SelectValue placeholder="Sort" />
           </SelectTrigger>
           <SelectContent>
+            {isAllTasks && <SelectItem value="manual">Manual order</SelectItem>}
             <SelectItem value="created">Created</SelectItem>
             <SelectItem value="updated">Updated</SelectItem>
             <SelectItem value="due">Due date</SelectItem>
