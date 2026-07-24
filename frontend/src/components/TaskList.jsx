@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Search, Filter } from "lucide-react";
+import { Save, Search, Filter } from "lucide-react";
 import useSingleFlight from "@/hooks/useSingleFlight";
 import { toast } from "sonner";
 
@@ -24,6 +24,8 @@ export default function TaskList({ scope, title, subtitle }) {
   const [loading, setLoading] = useState(true);
   const [settingsReady, setSettingsReady] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
+  const [customOrderDirty, setCustomOrderDirty] = useState(false);
+  const [savingCustomOrder, setSavingCustomOrder] = useState(false);
   const settingsSaveTimer = useRef(null);
   const runOnce = useSingleFlight();
   const scopeKey = scope || "all";
@@ -89,6 +91,7 @@ export default function TaskList({ scope, title, subtitle }) {
     try {
       const { data } = await api.get("/tasks", { params });
       setTasks(data);
+      setCustomOrderDirty(false);
     } finally {
       setLoading(false);
     }
@@ -116,12 +119,18 @@ export default function TaskList({ scope, title, subtitle }) {
     });
   };
 
-  const persistCustomOrder = async (orderedTasks) => {
+  const saveCustomOrder = async () => {
+    if (!isCustomSort || !customOrderDirty) return;
+    setSavingCustomOrder(true);
     try {
-      await api.patch("/tasks/custom-order", { task_ids: orderedTasks.map((t) => t.id) });
+      await api.patch("/tasks/custom-order", { task_ids: tasks.map((t) => t.id) });
+      setCustomOrderDirty(false);
+      toast.success("Custom sort saved");
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to save custom order");
       load();
+    } finally {
+      setSavingCustomOrder(false);
     }
   };
 
@@ -134,7 +143,7 @@ export default function TaskList({ scope, title, subtitle }) {
     const [moved] = next.splice(fromIndex, 1);
     next.splice(toIndex, 0, moved);
     setTasks(next);
-    persistCustomOrder(next);
+    setCustomOrderDirty(true);
   };
 
   return (
@@ -217,7 +226,10 @@ export default function TaskList({ scope, title, subtitle }) {
           <Button
             type="button"
             variant={isCustomSort ? "default" : "outline"}
-            onClick={() => setSort(isCustomSort ? "created" : "custom")}
+            onClick={() => {
+              if (isCustomSort) setCustomOrderDirty(false);
+              setSort(isCustomSort ? "created" : "custom");
+            }}
             className="w-full sm:w-auto"
             data-testid="custom-sort-btn"
           >
@@ -225,6 +237,27 @@ export default function TaskList({ scope, title, subtitle }) {
           </Button>
         )}
       </div>
+
+      {isCustomSort && (
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-border/60 bg-card/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm">
+            <div className="font-medium">Drag tasks to reorder</div>
+            <div className="text-xs text-muted-foreground">
+              {customOrderDirty ? "Unsaved changes. Click Save Sort to keep this order." : "Custom order is saved."}
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={saveCustomOrder}
+            disabled={!customOrderDirty || savingCustomOrder}
+            className="w-full rounded-full sm:w-auto"
+            data-testid="save-custom-sort-btn"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {savingCustomOrder ? "Saving..." : "Save Sort"}
+          </Button>
+        </div>
+      )}
 
       <div className="rounded-lg border border-border/60 overflow-hidden bg-card/20">
         {loading && <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>}
