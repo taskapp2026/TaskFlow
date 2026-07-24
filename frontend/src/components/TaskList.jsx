@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import TaskRow from "@/components/TaskRow";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Search, Filter } from "lucide-react";
 import useSingleFlight from "@/hooks/useSingleFlight";
@@ -200,7 +201,7 @@ export default function TaskList({ scope, title, subtitle }) {
             </SelectContent>
           </Select>
         )}
-        <Select value={sort} onValueChange={setSort}>
+        <Select value={isCustomSort ? "created" : sort} onValueChange={setSort}>
           <SelectTrigger className="w-full sm:w-[150px]" data-testid="filter-sort">
             <SelectValue placeholder="Sort" />
           </SelectTrigger>
@@ -210,9 +211,19 @@ export default function TaskList({ scope, title, subtitle }) {
             <SelectItem value="due">Due date</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
             <SelectItem value="alpha">Alphabetical</SelectItem>
-            {isAllTasks && <SelectItem value="custom">Custom Sort</SelectItem>}
           </SelectContent>
         </Select>
+        {isAllTasks && (
+          <Button
+            type="button"
+            variant={isCustomSort ? "default" : "outline"}
+            onClick={() => setSort(isCustomSort ? "created" : "custom")}
+            className="w-full sm:w-auto"
+            data-testid="custom-sort-btn"
+          >
+            Custom Sort
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border/60 overflow-hidden bg-card/20">
