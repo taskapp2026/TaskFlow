@@ -1,9 +1,20 @@
-import { Check } from "lucide-react";
+import { Check, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 
-export default function TaskRow({ task, onToggle, labels = [], users = [] }) {
+export default function TaskRow({
+  task,
+  onToggle,
+  labels = [],
+  users = [],
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}) {
   const labelMap = new Map(labels.map((l) => [l.id, l]));
   const assignee = users.find((u) => u.id === task.assignee_id);
   const isOverdue = task.due_date && !task.completed && new Date(task.due_date) < new Date(new Date().toDateString());
@@ -11,8 +22,22 @@ export default function TaskRow({ task, onToggle, labels = [], users = [] }) {
   return (
     <div
       data-testid={`task-row-${task.id}`}
-      className="group flex items-start gap-3 px-3 py-3 border-b border-border/40 hover:bg-muted/40 transition-colors sm:px-4"
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={cn(
+        "group flex items-start gap-3 px-3 py-3 border-b border-border/40 hover:bg-muted/40 transition-colors sm:px-4",
+        draggable && "cursor-grab active:cursor-grabbing",
+        isDragging && "bg-muted/60 opacity-70"
+      )}
     >
+      {draggable && (
+        <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center text-muted-foreground" aria-hidden="true">
+          <GripVertical className="h-4 w-4" />
+        </span>
+      )}
       <button
         aria-label="Toggle complete"
         data-testid={`task-toggle-${task.id}`}

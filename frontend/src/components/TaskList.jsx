@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import TaskRow from "@/components/TaskRow";
 import { useAuth } from "@/context/AuthContext";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Search, Filter } from "lucide-react";
 import useSingleFlight from "@/hooks/useSingleFlight";
+import { toast } from "sonner";
 
 export default function TaskList({ scope, title, subtitle }) {
   const { user } = useAuth();
@@ -20,15 +21,69 @@ export default function TaskList({ scope, title, subtitle }) {
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("created");
   const [loading, setLoading] = useState(true);
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const settingsSaveTimer = useRef(null);
   const runOnce = useSingleFlight();
+  const scopeKey = scope || "all";
+  const isAllTasks = !scope;
+  const isCustomSort = isAllTasks && sort === "custom";
+
+  useEffect(() => {
+    if (!user || user === false) return;
+    let active = true;
+    setSettingsReady(false);
+    (async () => {
+      try {
+        const { data } = await api.get("/me/task-list-settings", { params: { scope: scopeKey } });
+        if (!active) return;
+        const saved = data.settings || {};
+        setSearch(saved.search || "");
+        setPriority(saved.priority || "all");
+        setLabelId(saved.label_id || "all");
+        setAssigneeId(saved.assignee_id || "all");
+        setStatus(isAllTasks ? "all" : (saved.status || "all"));
+        setSort(saved.sort || "created");
+      } catch {
+        if (!active) return;
+        setStatus("all");
+        setSort((cur) => (!isAllTasks && cur === "custom" ? "created" : cur));
+      } finally {
+        if (active) setSettingsReady(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user, scopeKey, isAllTasks]);
+
+  useEffect(() => {
+    if (!settingsReady || !user || user === false) return;
+    if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
+    settingsSaveTimer.current = setTimeout(() => {
+      api.patch("/me/task-list-settings", {
+        scope: scopeKey,
+        sort,
+        priority,
+        label_id: labelId,
+        assignee_id: assigneeId,
+        status: isAllTasks ? "all" : status,
+        search,
+      }).catch(() => {});
+    }, 350);
+    return () => {
+      if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
+    };
+  }, [settingsReady, user, scopeKey, sort, priority, labelId, assigneeId, status, search, isAllTasks]);
 
   const load = useCallback(async () => {
+    if (!settingsReady) return;
     setLoading(true);
     const params = { scope, sort };
     if (priority !== "all") params.priority = priority;
     if (labelId !== "all") params.label_id = labelId;
     if (assigneeId !== "all") params.assignee_id = assigneeId;
-    if (status !== "all") params.status = status;
+    if (!isAllTasks && status !== "all") params.status = status;
     if (search) params.search = search;
     try {
       const { data } = await api.get("/tasks", { params });
@@ -36,7 +91,7 @@ export default function TaskList({ scope, title, subtitle }) {
     } finally {
       setLoading(false);
     }
-  }, [scope, sort, priority, labelId, assigneeId, status, search]);
+  }, [settingsReady, scope, sort, priority, labelId, assigneeId, status, search, isAllTasks]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -51,13 +106,34 @@ export default function TaskList({ scope, title, subtitle }) {
   const toggleTask = async (t) => {
     await runOnce(`task-toggle-${t.id}`, async () => {
       const optimistic = tasks.map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x));
-      setTasks(optimistic);
+      setTasks(isAllTasks && !t.completed ? optimistic.filter((x) => x.id !== t.id) : optimistic);
       try {
         await api.patch(`/tasks/${t.id}`, { completed: !t.completed });
       } catch {
         load();
       }
     });
+  };
+
+  const persistCustomOrder = async (orderedTasks) => {
+    try {
+      await api.patch("/tasks/custom-order", { task_ids: orderedTasks.map((t) => t.id) });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to save custom order");
+      load();
+    }
+  };
+
+  const moveTask = (fromId, toId) => {
+    if (!isCustomSort || fromId === toId) return;
+    const fromIndex = tasks.findIndex((t) => t.id === fromId);
+    const toIndex = tasks.findIndex((t) => t.id === toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const next = [...tasks];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setTasks(next);
+    persistCustomOrder(next);
   };
 
   return (
@@ -112,16 +188,18 @@ export default function TaskList({ scope, title, subtitle }) {
             </SelectContent>
           </Select>
         )}
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-full sm:w-[130px]" data-testid="filter-status">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
+        {!isAllTasks && (
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-full sm:w-[130px]" data-testid="filter-status">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All status</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         <Select value={sort} onValueChange={setSort}>
           <SelectTrigger className="w-full sm:w-[150px]" data-testid="filter-sort">
             <SelectValue placeholder="Sort" />
@@ -132,6 +210,7 @@ export default function TaskList({ scope, title, subtitle }) {
             <SelectItem value="due">Due date</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
             <SelectItem value="alpha">Alphabetical</SelectItem>
+            {isAllTasks && <SelectItem value="custom">Custom Sort</SelectItem>}
           </SelectContent>
         </Select>
       </div>
@@ -148,7 +227,33 @@ export default function TaskList({ scope, title, subtitle }) {
           </div>
         )}
         {!loading && tasks.map((t) => (
-          <TaskRow key={t.id} task={t} labels={labels} users={users} onToggle={toggleTask} />
+          <TaskRow
+            key={t.id}
+            task={t}
+            labels={labels}
+            users={users}
+            onToggle={toggleTask}
+            draggable={isCustomSort}
+            isDragging={draggingId === t.id}
+            onDragStart={(e) => {
+              setDraggingId(t.id);
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/task-id", t.id);
+            }}
+            onDragOver={(e) => {
+              if (isCustomSort) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const fromId = e.dataTransfer.getData("text/task-id") || draggingId;
+              setDraggingId(null);
+              moveTask(fromId, t.id);
+            }}
+            onDragEnd={() => setDraggingId(null)}
+          />
         ))}
       </div>
     </div>

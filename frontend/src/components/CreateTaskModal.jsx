@@ -6,7 +6,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useEffect, useState } from "react";
-import { CalendarIcon, Clock, FolderKanban, Tag as TagIcon, X } from "lucide-react";
+import { CalendarIcon, Clock, FolderKanban, Paperclip, Tag as TagIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -48,6 +48,7 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
   const [labels, setLabels] = useState([]);
   const [projects, setProjects] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [attachments, setAttachments] = useState([]);
   const runOnce = useSingleFlight();
 
   useEffect(() => {
@@ -68,11 +69,37 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
       setDueDate(initial.due_date ? new Date(initial.due_date) : null);
       setDueTime(initial.due_time || "");
       setReminder(initial.reminder?.preset || "none");
+      setAttachments([]);
     } else {
       setName(""); setDescription(""); setAssigneeId(""); setPriority("P4");
       setProjectId("none"); setLabelIds([]); setDueDate(null); setDueTime(""); setReminder("none");
+      setAttachments([]);
     }
   }, [open, initial]);
+
+  const addAttachments = (files) => {
+    const incoming = Array.from(files || []);
+    if (!incoming.length) return;
+    setAttachments((cur) => [...cur, ...incoming]);
+  };
+
+  const removeAttachment = (index) => {
+    setAttachments((cur) => cur.filter((_, i) => i !== index));
+  };
+
+  const uploadAttachmentsForTask = async (taskId) => {
+    let failed = 0;
+    for (const file of attachments) {
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        await api.post(`/tasks/${taskId}/attachments`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      } catch {
+        failed += 1;
+      }
+    }
+    return failed;
+  };
 
   const submit = async () => {
     await runOnce(isEdit ? `save-task-${initial.id}` : "create-task", async () => {
@@ -96,7 +123,12 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
           onCreated?.(data);
         } else {
           const { data } = await api.post("/tasks", payload);
-          toast.success("Task created");
+          const failedUploads = attachments.length ? await uploadAttachmentsForTask(data.id) : 0;
+          if (failedUploads) {
+            toast.error(`Task created, but ${failedUploads} attachment${failedUploads === 1 ? "" : "s"} failed to upload`);
+          } else {
+            toast.success(attachments.length ? "Task created with attachments" : "Task created");
+          }
           onCreated?.(data);
         }
         onOpenChange(false);
@@ -251,6 +283,50 @@ export default function CreateTaskModal({ open, onOpenChange, onCreated, initial
               </SelectContent>
             </Select>
           </div>
+
+          {!isEdit && (
+            <div>
+              <div className="overline mb-1.5 flex items-center gap-1"><Paperclip className="w-3 h-3" /> Attachments</div>
+              <label
+                className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border/70 bg-card/20 px-3 py-4 text-center transition-colors hover:bg-muted/40"
+                data-testid="task-create-attachment-dropzone"
+              >
+                <Paperclip className="h-5 w-5 text-muted-foreground" />
+                <span className="mt-2 text-sm font-medium">Add files</span>
+                <span className="mt-1 text-xs text-muted-foreground">They will upload after the task is created.</span>
+                <input
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    addAttachments(e.target.files);
+                    e.target.value = "";
+                  }}
+                  data-testid="task-create-attachment-input"
+                />
+              </label>
+              {attachments.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  {attachments.map((file, index) => (
+                    <div key={`${file.name}-${file.size}-${index}`} className="flex items-center gap-2 rounded-md border border-border/50 bg-card/30 px-2.5 py-2 text-sm">
+                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1 truncate">{file.name}</div>
+                      <div className="shrink-0 text-[11px] text-muted-foreground">{Math.round((file.size || 0) / 1024)} KB</div>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(index)}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive"
+                        aria-label={`Remove ${file.name}`}
+                        data-testid={`task-create-attachment-remove-${index}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full sm:w-auto" data-testid="task-cancel-btn">Cancel</Button>

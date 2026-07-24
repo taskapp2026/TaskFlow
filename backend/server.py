@@ -410,6 +410,20 @@ class AttachmentCleanupIn(BaseModel):
     attachment_ids: List[str] = Field(default_factory=list)
 
 
+class TaskListSettingsIn(BaseModel):
+    scope: str = "all"
+    sort: Optional[str] = None
+    priority: Optional[str] = None
+    label_id: Optional[str] = None
+    assignee_id: Optional[str] = None
+    status: Optional[str] = None
+    search: Optional[str] = None
+
+
+class TaskOrderIn(BaseModel):
+    task_ids: List[str] = Field(default_factory=list)
+
+
 # =========================================================
 # Utility
 # =========================================================
@@ -434,6 +448,25 @@ def serialize(doc: dict) -> dict:
         if isinstance(v, ObjectId):
             doc[k] = str(v)
     return doc
+
+
+def normalize_task_list_scope(scope: Optional[str]) -> str:
+    return scope if scope in ("today", "upcoming", "overdue", "completed") else "all"
+
+
+def normalize_task_list_settings(settings: dict) -> dict:
+    allowed_sorts = {"created", "updated", "due", "priority", "alpha", "custom"}
+    allowed_priorities = {"all", "P1", "P2", "P3", "P4"}
+    allowed_statuses = {"all", "pending", "completed"}
+    out = {
+        "sort": settings.get("sort") if settings.get("sort") in allowed_sorts else "created",
+        "priority": settings.get("priority") if settings.get("priority") in allowed_priorities else "all",
+        "label_id": settings.get("label_id") or "all",
+        "assignee_id": settings.get("assignee_id") or "all",
+        "status": settings.get("status") if settings.get("status") in allowed_statuses else "all",
+        "search": settings.get("search") or "",
+    }
+    return out
 
 
 def clean_participant_ids(ids: Optional[List[str]], creator_id: str) -> List[str]:
@@ -637,6 +670,41 @@ async def logout(response: Response):
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return user_public(user)
+
+
+@api.get("/me/task-list-settings")
+async def get_task_list_settings(scope: Optional[str] = "all", user=Depends(get_current_user)):
+    scope_key = normalize_task_list_scope(scope)
+    doc = await db.user_task_list_settings.find_one({
+        "user_id": str(user["_id"]),
+        "scope": scope_key,
+    })
+    settings = normalize_task_list_settings(doc.get("settings", {}) if doc else {})
+    if scope_key != "all" and settings["sort"] == "custom":
+        settings["sort"] = "created"
+    return {"scope": scope_key, "settings": settings}
+
+
+@api.patch("/me/task-list-settings")
+async def save_task_list_settings(body: TaskListSettingsIn, user=Depends(get_current_user)):
+    scope_key = normalize_task_list_scope(body.scope)
+    incoming = {
+        "sort": body.sort,
+        "priority": body.priority,
+        "label_id": body.label_id,
+        "assignee_id": body.assignee_id,
+        "status": body.status,
+        "search": body.search,
+    }
+    settings = normalize_task_list_settings({k: v for k, v in incoming.items() if v is not None})
+    if scope_key != "all" and settings["sort"] == "custom":
+        settings["sort"] = "created"
+    await db.user_task_list_settings.update_one(
+        {"user_id": str(user["_id"]), "scope": scope_key},
+        {"$set": {"settings": settings, "updated_at": now_iso()}},
+        upsert=True,
+    )
+    return {"scope": scope_key, "settings": settings}
 
 
 # =========================================================
@@ -1047,6 +1115,26 @@ def build_task_query(user: dict, params: dict) -> dict:
     return q
 
 
+async def sort_tasks_by_custom_order(user_id: str, docs: List[dict]) -> List[dict]:
+    if not docs:
+        return docs
+    id_to_index = {str(d["_id"]): idx for idx, d in enumerate(docs)}
+    order_docs = await db.task_custom_orders.find({
+        "user_id": user_id,
+        "scope": "all",
+        "task_id": {"$in": list(id_to_index.keys())},
+    }).to_list(len(id_to_index))
+    positions = {d["task_id"]: d.get("position", 0) for d in order_docs}
+    return sorted(
+        docs,
+        key=lambda d: (
+            0 if str(d["_id"]) in positions else 1,
+            positions.get(str(d["_id"]), 0),
+            id_to_index[str(d["_id"])],
+        ),
+    )
+
+
 @api.get("/tasks")
 async def list_tasks(
     request: Request,
@@ -1066,6 +1154,8 @@ async def list_tasks(
     params = dict(scope=scope, priority=priority, label_id=label_id,
                   project_id=project_id, assignee_id=assignee_id, created_by=created_by, status=status, search=search)
     q = build_task_query(user, params)
+    if not scope and not project_id:
+        q["completed"] = {"$ne": True}
     sort_map = {
         "created": ("created_at", -1),
         "updated": ("updated_at", -1),
@@ -1075,7 +1165,47 @@ async def list_tasks(
     }
     sk, sd = sort_map.get(sort or "created", ("created_at", -1))
     docs = await db.tasks.find(q).sort(sk, sd).to_list(2000)
+    if (sort or "created") == "custom" and not scope and not project_id:
+        docs = await sort_tasks_by_custom_order(str(user["_id"]), docs)
     return [serialize(d) for d in docs]
+
+
+@api.patch("/tasks/custom-order")
+async def save_task_custom_order(body: TaskOrderIn, user=Depends(get_current_user)):
+    task_ids = []
+    seen = set()
+    for task_id in body.task_ids:
+        if task_id in seen:
+            continue
+        oid(task_id)
+        seen.add(task_id)
+        task_ids.append(task_id)
+    if not task_ids:
+        return {"ok": True, "updated_count": 0}
+
+    visibility_query = build_task_query(user, {"scope": None})
+    visibility_query["completed"] = {"$ne": True}
+    visible_count = await db.tasks.count_documents({
+        **visibility_query,
+        "_id": {"$in": [ObjectId(task_id) for task_id in task_ids]},
+    })
+    if visible_count != len(task_ids):
+        raise HTTPException(status_code=403, detail="Cannot reorder tasks outside your visible incomplete task list")
+
+    user_id = str(user["_id"])
+    ops = []
+    timestamp = now_iso()
+    for idx, task_id in enumerate(task_ids):
+        ops.append(
+            db.task_custom_orders.update_one(
+                {"user_id": user_id, "scope": "all", "task_id": task_id},
+                {"$set": {"position": (idx + 1) * 1000, "updated_at": timestamp}},
+                upsert=True,
+            )
+        )
+    if ops:
+        await asyncio.gather(*ops)
+    return {"ok": True, "updated_count": len(task_ids)}
 
 
 @api.get("/tasks/{task_id}")
@@ -1743,6 +1873,9 @@ async def startup():
         await db.projects.create_index([("participant_ids", 1), ("updated_at", -1)])
         await db.activities.create_index([("task_id", 1), ("created_at", -1)])
         await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+        await db.user_task_list_settings.create_index([("user_id", 1), ("scope", 1)], unique=True)
+        await db.task_custom_orders.create_index([("user_id", 1), ("scope", 1), ("task_id", 1)], unique=True)
+        await db.task_custom_orders.create_index([("user_id", 1), ("scope", 1), ("position", 1)])
     except Exception as e:
         logger.error(f"Index setup: {e}")
     # Seed admin
